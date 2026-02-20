@@ -552,9 +552,19 @@
 			<div class="search-input-wrapper">
 				{#if searchMode === 'entity'}
 					{#each selectedEntities as entity (`${entity.cik}_${entity.name}`)}
-						<span class="entity-badge">
-							{entity.name} | {entity.cik}
-							<button type="button" class="remove" onclick={() => removeEntity(entity.cik, entity.name)} aria-label="Remove {entity.name}">x</button>
+						<span class="entity-badge-wrapper">
+							<span class="entity-badge">
+								{entity.name} | {entity.cik}
+								<button type="button" class="remove" onclick={() => removeEntity(entity.cik, entity.name)} aria-label="Remove {entity.name}">x</button>
+							</span>
+							<span class="entity-hover-popup">
+								<span class="hover-label">Entity</span>
+								<span class="hover-value">{entity.name}</span>
+								<span class="hover-label">CIK</span>
+								<span class="hover-value">{entity.cik}</span>
+								<span class="hover-label">EDGAR</span>
+								<a class="hover-link" href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={entity.cik}&type=&dateb=&owner=include&count=40" target="_blank" rel="noopener noreferrer">View on SEC EDGAR</a>
+							</span>
 						</span>
 					{/each}
 				{/if}
@@ -638,17 +648,54 @@
 							<div class="name-row" class:match-row-highlight={entry.oigStatus === 'match'}>
 								<div class="name-left">
 									<div class="name-primary">
-										{#if entry.oigStatus === 'match' && entry.oigMatches?.[0]}
-											<a
-												href={buildOIGVerifyUrl(entry.oigMatches[0].lastName, entry.oigMatches[0].firstName)}
-												target="_blank"
-												rel="noopener noreferrer"
-												class="name-link match-link"
-												title="Verify {entry.oigMatches[0].lastName}, {entry.oigMatches[0].firstName} on OIG"
-											>{entry.name.fullName}</a>
-										{:else}
-											<span class="name-text">{entry.name.fullName}</span>
-										{/if}
+										<span class="name-hover-wrapper">
+											{#if entry.oigStatus === 'match' && entry.oigMatches?.[0]}
+												<a
+													href={buildOIGVerifyUrl(entry.oigMatches[0].lastName, entry.oigMatches[0].firstName)}
+													target="_blank"
+													rel="noopener noreferrer"
+													class="name-link match-link"
+												>{entry.name.fullName}</a>
+											{:else}
+												<span class="name-text">{entry.name.fullName}</span>
+											{/if}
+											<span class="name-hover-popup">
+												<span class="hover-label">Full Name</span>
+												<span class="hover-value">{entry.name.fullName}</span>
+												{#if entry.name.firstName}
+													<span class="hover-label">First</span>
+													<span class="hover-value">{entry.name.firstName}</span>
+												{/if}
+												{#if entry.name.middleName}
+													<span class="hover-label">Middle</span>
+													<span class="hover-value">{entry.name.middleName}</span>
+												{/if}
+												{#if entry.name.lastName}
+													<span class="hover-label">Last</span>
+													<span class="hover-value">{entry.name.lastName}</span>
+												{/if}
+												<span class="hover-label">Source</span>
+												<span class="hover-value">{entry.source}</span>
+												{#if entry.name.source && entry.name.source !== entry.source}
+													<span class="hover-label">Pattern</span>
+													<span class="hover-value">{entry.name.source}</span>
+												{/if}
+												{#if entry.filings && entry.filings.length > 0}
+													<span class="hover-label">Filings</span>
+													<span class="hover-value">{entry.filings.map(f => `${f.form} ${f.date}`).join(', ')}</span>
+												{/if}
+												{#if entry.oigMatches && entry.oigMatches.length > 0}
+													<span class="hover-label">OIG Excl. Type</span>
+													<span class="hover-value hover-match">{formatExclType(entry.oigMatches[0].exclType)}</span>
+													<span class="hover-label">Excl. Date</span>
+													<span class="hover-value">{formatOIGDate(entry.oigMatches[0].exclDate)}</span>
+													{#if entry.oigMatches[0].npi}
+														<span class="hover-label">NPI</span>
+														<span class="hover-value">{entry.oigMatches[0].npi}</span>
+													{/if}
+												{/if}
+											</span>
+										</span>
 										<span class="badge {statusBadgeClass(entry.oigStatus)}">
 											{statusLabel(entry.oigStatus, entry.oigMatches)}
 										</span>
@@ -935,6 +982,90 @@
 		color: var(--color-text);
 		font-size: 0.85em;
 	}
+
+	/* Entity badge hover popup */
+	.entity-badge-wrapper {
+		position: relative;
+		display: inline-flex;
+	}
+
+	.entity-hover-popup {
+		display: none;
+		position: absolute;
+		top: calc(100% + 4px);
+		left: 0;
+		z-index: 160;
+		min-width: 220px;
+		padding: var(--spacing-xs) var(--spacing-sm);
+		background: var(--color-bg);
+		border: 1px solid var(--color-border-dark);
+		box-shadow: 3px 3px 0px var(--color-shadow);
+	}
+
+	.entity-badge-wrapper:hover .entity-hover-popup {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 0.15rem 0.5rem;
+		align-items: baseline;
+	}
+
+	/* Name hover popup */
+	.name-hover-wrapper {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+	}
+
+	.name-hover-popup {
+		display: none;
+		position: absolute;
+		top: calc(100% + 4px);
+		left: 0;
+		z-index: 160;
+		min-width: 280px;
+		max-width: 400px;
+		padding: var(--spacing-xs) var(--spacing-sm);
+		background: var(--color-bg);
+		border: 1px solid var(--color-border-dark);
+		box-shadow: 3px 3px 0px var(--color-shadow);
+	}
+
+	.name-hover-wrapper:hover .name-hover-popup {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 0.15rem 0.5rem;
+		align-items: baseline;
+	}
+
+	/* Shared hover popup labels/values */
+	.hover-label {
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--color-text-muted);
+		white-space: nowrap;
+	}
+
+	.hover-value {
+		font-size: 0.78rem;
+		color: var(--color-text);
+		word-break: break-word;
+	}
+
+	.hover-value.hover-match {
+		color: var(--color-error);
+		font-weight: 600;
+	}
+
+	.hover-link {
+		font-size: 0.75rem;
+		color: var(--color-link);
+		text-decoration: none;
+	}
+
+	.hover-link:hover { text-decoration: underline; }
 
 	/* Compact info popup */
 	.compact-info-wrapper {
