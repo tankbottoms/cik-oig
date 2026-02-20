@@ -83,18 +83,35 @@
 	let searchMode: 'entity' | 'person' = $state('entity');
 	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
-	// Pre-pin Robert B. Spertell on mount
-	onMount(() => {
-		extractedNames.update(names => {
-			if (names.some(n => n.name.lastName.toLowerCase() === 'spertell')) return names;
-			return [...names, {
+	// Pre-pin Robert B. Spertell on mount and check against OIG
+	onMount(async () => {
+		const alreadyExists = $extractedNames.some(n => n.name.lastName.toLowerCase() === 'spertell');
+		if (!alreadyExists) {
+			extractedNames.update(names => [...names, {
 				name: { firstName: 'Robert', lastName: 'Spertell', middleName: 'B.', fullName: 'Robert B. Spertell', source: 'Pre-loaded' },
 				oigStatus: 'pending' as const,
 				source: 'Pre-loaded',
 				filings: [],
 				pinned: true,
-			}];
-		});
+			}]);
+		}
+		// Check pre-loaded names against OIG
+		const pending = $extractedNames.filter(n => n.oigStatus === 'pending');
+		if (pending.length > 0) {
+			try {
+				const resp = await fetch('/api/oig/search', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						names: pending.map(n => ({ firstName: n.name.firstName, lastName: n.name.lastName, middleName: n.name.middleName })),
+					}),
+				});
+				const result = await resp.json();
+				updateOIGResults(result.results);
+			} catch {
+				// Silently fail for pre-loaded check
+			}
+		}
 	});
 
 	function onInput() {
@@ -127,6 +144,8 @@
 	}
 
 	function clearSearch() {
+		// Always allow clearing, even mid-search
+		isSearching.set(false);
 		selectedEntities = [];
 		query = '';
 		clearLog();
@@ -448,10 +467,12 @@
 	}
 
 	function updateOIGResults(results: OIGSearchResult[]) {
+		const logged = new Set<string>();
 		for (const result of results) {
 			const nameParts = result.queriedName.split(' ');
 			const firstName = nameParts[0]?.toLowerCase() || '';
 			const lastName = nameParts[nameParts.length - 1]?.toLowerCase() || '';
+			const logKey = `${firstName}_${lastName}`;
 
 			extractedNames.update(names =>
 				names.map(n => {
@@ -460,11 +481,19 @@
 							: result.status === 'POSSIBLE_MATCH' ? 'possible_match' as const
 							: 'clear' as const;
 
-						if (status === 'match') addLog(`${result.queriedName} - MATCH (${result.matches[0]?.exclType})`, 'match');
-						else if (status === 'possible_match') addLog(`${result.queriedName} - POSSIBLE MATCH`, 'match');
-						else addLog(`${result.queriedName} - NOT FOUND`, 'clear');
+						// Only log once per name (avoid duplicates from individual+business results)
+						if (!logged.has(logKey)) {
+							logged.add(logKey);
+							if (status === 'match') addLog(`${result.queriedName} - MATCH (${result.matches[0]?.exclType})`, 'match');
+							else if (status === 'possible_match') addLog(`${result.queriedName} - POSSIBLE MATCH`, 'match');
+							else addLog(`${result.queriedName} - NOT FOUND`, 'clear');
+						}
 
-						return { ...n, oigStatus: status, oigMatches: result.matches };
+						// Keep the more severe status if already set (match > possible > clear)
+						const severity = { match: 3, possible_match: 2, clear: 1, pending: 0 };
+						if (severity[status] >= severity[n.oigStatus] || n.oigStatus === 'pending') {
+							return { ...n, oigStatus: status, oigMatches: result.matches.length > 0 ? result.matches : n.oigMatches };
+						}
 					}
 					return n;
 				})
@@ -578,11 +607,10 @@
 					placeholder={searchMode === 'person'
 						? 'Enter name (Last, First or First Last)...'
 						: selectedEntities.length > 0 ? 'Add another entity or name...' : 'Search SEC entities by name or CIK...'}
-					disabled={$isSearching}
 				/>
 			</div>
 			{#if selectedEntities.length > 0 || query.length > 0 || searchActive}
-				<button class="clear-btn" onclick={clearSearch} title="Clear search" disabled={$isSearching}>
+				<button class="clear-btn" onclick={clearSearch} title="Clear search">
 					CLEAR
 				</button>
 			{/if}
@@ -829,7 +857,7 @@
 						</button>
 					</div>
 					<div class="terminal-log" class:expanded={logExpanded} id="terminal-log">
-						{#each $logLines as line (line.timestamp + line.text)}
+						{#each $logLines as line, idx (idx + '_' + line.timestamp)}
 							{#if line.url}
 								<a href={line.url} target="_blank" rel="noopener noreferrer" class="log-line log-line-link {line.type}">
 									<span class="log-time">[{formatTimestamp(line.timestamp)}]</span>
