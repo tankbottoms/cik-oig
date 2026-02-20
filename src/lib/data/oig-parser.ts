@@ -1,5 +1,5 @@
 import { readFileSync, existsSync } from 'fs';
-import { join, resolve } from 'path';
+import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import type { OIGExclusion, OIGMatch } from '$lib/types';
 
@@ -99,43 +99,50 @@ export async function loadOIGData(origin?: string): Promise<void> {
     individuals = new Map();
     businesses = new Map();
 
-    // Try filesystem paths first (works locally and in some deployment environments)
+    const thisDir = dirname(fileURLToPath(import.meta.url));
+
+    // Try filesystem paths (local dev + Vercel includeFiles bundle)
     const possiblePaths = [
       join(process.cwd(), 'static', 'csvs', 'UPDATED.csv'),
-      resolve(fileURLToPath(import.meta.url), '../../../..', 'static', 'csvs', 'UPDATED.csv'),
+      resolve(thisDir, '../../../..', 'static', 'csvs', 'UPDATED.csv'),
+      resolve(thisDir, '..', 'static', 'csvs', 'UPDATED.csv'),
+      resolve(thisDir, '..', 'csvs', 'UPDATED.csv'),
+      join(process.cwd(), 'csvs', 'UPDATED.csv'),
     ];
 
     let raw: string | null = null;
 
-    const csvPath = possiblePaths.find(p => existsSync(p));
-    if (csvPath) {
-      try {
-        raw = readFileSync(csvPath, 'utf-8');
-      } catch {
-        console.warn('OIG CSV read error at', csvPath);
+    for (const p of possiblePaths) {
+      if (existsSync(p)) {
+        try {
+          raw = readFileSync(p, 'utf-8');
+          console.log('OIG CSV loaded from filesystem:', p);
+          break;
+        } catch {
+          console.warn('OIG CSV read error at', p);
+        }
       }
     }
 
-    // Fallback: fetch from static CDN using global fetch with absolute URL
-    // (works on Vercel where static files are on CDN but not on the serverless filesystem)
+    // Fallback: fetch from CDN (Vercel serves static/ files via CDN)
     if (!raw && origin) {
       try {
         const csvUrl = `${origin}/csvs/UPDATED.csv`;
-        console.log('OIG CSV: fetching from', csvUrl);
+        console.log('OIG CSV: fetching from CDN at', csvUrl);
         const resp = await globalThis.fetch(csvUrl);
         if (resp.ok) {
           raw = await resp.text();
-          console.log('OIG CSV loaded via fetch fallback');
+          console.log(`OIG CSV loaded via CDN fetch (${raw.length} bytes)`);
         } else {
-          console.warn('OIG CSV fetch returned', resp.status);
+          console.warn('OIG CSV CDN fetch returned', resp.status);
         }
       } catch (err) {
-        console.warn('OIG CSV fetch fallback failed:', err);
+        console.warn('OIG CSV CDN fetch failed:', err);
       }
     }
 
     if (!raw) {
-      console.warn('OIG CSV not found - run "bun run data:oig" first');
+      console.warn('OIG CSV not found at any path. Tried:', possiblePaths.join(', '));
       loaded = true;
       return;
     }
