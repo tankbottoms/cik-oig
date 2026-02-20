@@ -91,7 +91,7 @@ function indexCSV(raw: string): void {
   );
 }
 
-export async function loadOIGData(fetchFn?: typeof fetch): Promise<void> {
+export async function loadOIGData(origin?: string): Promise<void> {
   if (loaded) return;
   if (loadingPromise) return loadingPromise;
 
@@ -116,16 +116,21 @@ export async function loadOIGData(fetchFn?: typeof fetch): Promise<void> {
       }
     }
 
-    // Fallback: fetch from static CDN (works on Vercel where static files are served via CDN)
-    if (!raw && fetchFn) {
+    // Fallback: fetch from static CDN using global fetch with absolute URL
+    // (works on Vercel where static files are on CDN but not on the serverless filesystem)
+    if (!raw && origin) {
       try {
-        const resp = await fetchFn('/csvs/UPDATED.csv');
+        const csvUrl = `${origin}/csvs/UPDATED.csv`;
+        console.log('OIG CSV: fetching from', csvUrl);
+        const resp = await globalThis.fetch(csvUrl);
         if (resp.ok) {
           raw = await resp.text();
           console.log('OIG CSV loaded via fetch fallback');
+        } else {
+          console.warn('OIG CSV fetch returned', resp.status);
         }
-      } catch {
-        console.warn('OIG CSV fetch fallback failed');
+      } catch (err) {
+        console.warn('OIG CSV fetch fallback failed:', err);
       }
     }
 

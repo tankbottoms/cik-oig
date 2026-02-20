@@ -3,9 +3,10 @@ import type { RequestHandler } from './$types';
 import { loadOIGData, searchIndividual, searchBusiness } from '$lib/data/oig-parser';
 import type { OIGSearchResult } from '$lib/types';
 
-export const POST: RequestHandler = async ({ request, fetch }) => {
-  // Await OIG data load (passes fetch for CDN fallback on Vercel)
-  await loadOIGData(fetch);
+export const POST: RequestHandler = async ({ request, url }) => {
+  // Build origin for CDN fetch fallback (works on Vercel where static files are on CDN)
+  const origin = url.origin;
+  await loadOIGData(origin);
 
   const body = await request.json();
   const { names = [], businesses = [] } = body as {
