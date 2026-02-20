@@ -6,6 +6,7 @@ import type { OIGExclusion, OIGMatch } from '$lib/types';
 let individuals: Map<string, OIGExclusion[]> | null = null;
 let businesses: Map<string, OIGExclusion[]> | null = null;
 let loaded = false;
+let loadingPromise: Promise<void> | null = null;
 
 function normalizeKey(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -31,32 +32,9 @@ function parseCSVLine(line: string): string[] {
   return fields;
 }
 
-export function loadOIGData(): void {
-  if (loaded) return;
-
+function indexCSV(raw: string): void {
   individuals = new Map();
   businesses = new Map();
-
-  const possiblePaths = [
-    join(process.cwd(), 'static', 'csvs', 'UPDATED.csv'),
-    resolve(fileURLToPath(import.meta.url), '../../../..', 'static', 'csvs', 'UPDATED.csv'),
-  ];
-
-  let csvPath = possiblePaths.find(p => existsSync(p));
-  if (!csvPath) {
-    console.warn('OIG CSV not found at any of:', possiblePaths, '- run "bun run data:oig" first');
-    loaded = true;
-    return;
-  }
-
-  let raw: string;
-  try {
-    raw = readFileSync(csvPath, 'utf-8');
-  } catch {
-    console.warn('OIG CSV read error at', csvPath);
-    loaded = true;
-    return;
-  }
 
   const lines = raw.split('\n');
   // Skip header row
@@ -113,12 +91,61 @@ export function loadOIGData(): void {
   );
 }
 
+export async function loadOIGData(fetchFn?: typeof fetch): Promise<void> {
+  if (loaded) return;
+  if (loadingPromise) return loadingPromise;
+
+  loadingPromise = (async () => {
+    individuals = new Map();
+    businesses = new Map();
+
+    // Try filesystem paths first (works locally and in some deployment environments)
+    const possiblePaths = [
+      join(process.cwd(), 'static', 'csvs', 'UPDATED.csv'),
+      resolve(fileURLToPath(import.meta.url), '../../../..', 'static', 'csvs', 'UPDATED.csv'),
+    ];
+
+    let raw: string | null = null;
+
+    const csvPath = possiblePaths.find(p => existsSync(p));
+    if (csvPath) {
+      try {
+        raw = readFileSync(csvPath, 'utf-8');
+      } catch {
+        console.warn('OIG CSV read error at', csvPath);
+      }
+    }
+
+    // Fallback: fetch from static CDN (works on Vercel where static files are served via CDN)
+    if (!raw && fetchFn) {
+      try {
+        const resp = await fetchFn('/csvs/UPDATED.csv');
+        if (resp.ok) {
+          raw = await resp.text();
+          console.log('OIG CSV loaded via fetch fallback');
+        }
+      } catch {
+        console.warn('OIG CSV fetch fallback failed');
+      }
+    }
+
+    if (!raw) {
+      console.warn('OIG CSV not found - run "bun run data:oig" first');
+      loaded = true;
+      return;
+    }
+
+    indexCSV(raw);
+  })();
+
+  return loadingPromise;
+}
+
 export function searchIndividual(
   firstName: string,
   lastName: string,
   middleName?: string
 ): OIGMatch[] {
-  if (!individuals) loadOIGData();
   if (!individuals) return [];
 
   const matches: OIGMatch[] = [];
@@ -152,7 +179,6 @@ export function searchIndividual(
 }
 
 export function searchBusiness(busName: string): OIGMatch[] {
-  if (!businesses) loadOIGData();
   if (!businesses) return [];
 
   const key = normalizeKey(busName);

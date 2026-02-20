@@ -3,14 +3,9 @@ import type { RequestHandler } from './$types';
 import { loadOIGData, searchIndividual, searchBusiness } from '$lib/data/oig-parser';
 import type { OIGSearchResult } from '$lib/types';
 
-// Eagerly load OIG data on first request
-let initialized = false;
-
-export const POST: RequestHandler = async ({ request }) => {
-  if (!initialized) {
-    loadOIGData();
-    initialized = true;
-  }
+export const POST: RequestHandler = async ({ request, fetch }) => {
+  // Await OIG data load (passes fetch for CDN fallback on Vercel)
+  await loadOIGData(fetch);
 
   const body = await request.json();
   const { names = [], businesses = [] } = body as {
