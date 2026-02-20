@@ -1,5 +1,6 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { readFileSync, existsSync } from 'fs';
+import { join, resolve } from 'path';
+import { fileURLToPath } from 'url';
 import type { OIGExclusion, OIGMatch } from '$lib/types';
 
 let individuals: Map<string, OIGExclusion[]> | null = null;
@@ -36,13 +37,23 @@ export function loadOIGData(): void {
   individuals = new Map();
   businesses = new Map();
 
-  const csvPath = join(process.cwd(), 'static', 'csvs', 'UPDATED.csv');
-  let raw: string;
+  const possiblePaths = [
+    join(process.cwd(), 'static', 'csvs', 'UPDATED.csv'),
+    resolve(fileURLToPath(import.meta.url), '../../../..', 'static', 'csvs', 'UPDATED.csv'),
+  ];
 
+  let csvPath = possiblePaths.find(p => existsSync(p));
+  if (!csvPath) {
+    console.warn('OIG CSV not found at any of:', possiblePaths, '- run "bun run data:oig" first');
+    loaded = true;
+    return;
+  }
+
+  let raw: string;
   try {
     raw = readFileSync(csvPath, 'utf-8');
   } catch {
-    console.warn('OIG CSV not found at', csvPath, '- run "bun run data:oig" first');
+    console.warn('OIG CSV read error at', csvPath);
     loaded = true;
     return;
   }
