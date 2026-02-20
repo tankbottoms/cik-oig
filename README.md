@@ -2,7 +2,7 @@
 
 SEC EDGAR entity search with OIG exclusion cross-reference. Search any SEC-registered entity by name or CIK number, extract affiliated persons from filings, and check them against the HHS OIG List of Excluded Individuals/Entities (LEIE).
 
-![Screenshot](docs/screenshot.png)
+![Screenshot](docs/screenshot2.png)
 
 ## Features
 
