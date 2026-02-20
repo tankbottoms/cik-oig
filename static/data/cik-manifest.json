@@ -1,0 +1,137 @@
+{
+  "j": {
+    "file": "cik_j.json",
+    "count": 15755,
+    "sizeKB": 752
+  },
+  "a": {
+    "file": "cik_a.json",
+    "count": 74658,
+    "sizeKB": 3919
+  },
+  "p": {
+    "file": "cik_p.json",
+    "count": 57201,
+    "sizeKB": 2894
+  },
+  "t": {
+    "file": "cik_t.json",
+    "count": 45379,
+    "sizeKB": 2260
+  },
+  "l": {
+    "file": "cik_l.json",
+    "count": 40426,
+    "sizeKB": 1934
+  },
+  "s": {
+    "file": "cik_s.json",
+    "count": 96139,
+    "sizeKB": 4761
+  },
+  "o": {
+    "file": "cik_o.json",
+    "count": 22493,
+    "sizeKB": 1133
+  },
+  "v": {
+    "file": "cik_v.json",
+    "count": 22702,
+    "sizeKB": 1165
+  },
+  "m": {
+    "file": "cik_m.json",
+    "count": 71520,
+    "sizeKB": 3490
+  },
+  "y": {
+    "file": "cik_y.json",
+    "count": 4897,
+    "sizeKB": 214
+  },
+  "c": {
+    "file": "cik_c.json",
+    "count": 86748,
+    "sizeKB": 4393
+  },
+  "i": {
+    "file": "cik_i.json",
+    "count": 26395,
+    "sizeKB": 1419
+  },
+  "f": {
+    "file": "cik_f.json",
+    "count": 53121,
+    "sizeKB": 2458
+  },
+  "d": {
+    "file": "cik_d.json",
+    "count": 39012,
+    "sizeKB": 1923
+  },
+  "e": {
+    "file": "cik_e.json",
+    "count": 35263,
+    "sizeKB": 1866
+  },
+  "g": {
+    "file": "cik_g.json",
+    "count": 49121,
+    "sizeKB": 2457
+  },
+  "h": {
+    "file": "cik_h.json",
+    "count": 47043,
+    "sizeKB": 2263
+  },
+  "k": {
+    "file": "cik_k.json",
+    "count": 28944,
+    "sizeKB": 1343
+  },
+  "b": {
+    "file": "cik_b.json",
+    "count": 68272,
+    "sizeKB": 3363
+  },
+  "n": {
+    "file": "cik_n.json",
+    "count": 32310,
+    "sizeKB": 1660
+  },
+  "r": {
+    "file": "cik_r.json",
+    "count": 43818,
+    "sizeKB": 2113
+  },
+  "w": {
+    "file": "cik_w.json",
+    "count": 37821,
+    "sizeKB": 1835
+  },
+  "q": {
+    "file": "cik_q.json",
+    "count": 4344,
+    "sizeKB": 212
+  },
+  "u": {
+    "file": "cik_u.json",
+    "count": 9895,
+    "sizeKB": 502
+  },
+  "x": {
+    "file": "cik_x.json",
+    "count": 2138,
+    "sizeKB": 97
+  },
+  "_": {
+    "file": "cik__.json",
+    "count": 3,
+    "sizeKB": 0
+  },
+  "z": {
+    "file": "cik_z.json",
+    "count": 6270,
+    "sizeKB": 278
+  }
+}
