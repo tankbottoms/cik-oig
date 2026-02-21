@@ -6,6 +6,16 @@ export interface HealthcareEntity {
 export interface SelectedEntity {
   name: string;
   cik: string;
+  pinned?: boolean;
+  color?: string;
+}
+
+export interface EntityGroup {
+  id: string;
+  name: string;
+  color: string;
+  entityCiks: string[];
+  createdAt: number;
 }
 
 export interface SECSubmission {

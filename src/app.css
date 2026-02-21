@@ -226,13 +226,49 @@ input:focus, textarea:focus {
   box-shadow: none;
 }
 
+/* Person badge */
+.person-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.5rem;
+  background: rgba(40, 167, 69, 0.15);
+  border: 1px solid var(--color-success);
+  color: var(--color-success);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 0;
+  text-transform: uppercase;
+}
+
+.person-badge .remove {
+  cursor: pointer;
+  opacity: 0.6;
+  font-size: 0.65rem;
+  background: none;
+  border: none;
+  color: inherit;
+  padding: 0 0.15rem;
+  font-family: var(--font-mono);
+  box-shadow: none;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.person-badge .remove:hover {
+  opacity: 1;
+  transform: none;
+  box-shadow: none;
+}
+
 /* Terminal log */
 .terminal-log {
   background: var(--color-bg-alt);
   border: 1px solid var(--color-border-light);
   border-radius: 0;
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 11px;
   padding: var(--spacing-md);
   max-height: 400px;
   overflow-y: auto;
@@ -241,7 +277,7 @@ input:focus, textarea:focus {
 
 .log-line {
   padding: 2px 0;
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 .log-line::before {
@@ -352,10 +388,27 @@ input:focus, textarea:focus {
 @media (max-width: 768px) {
   html { font-size: 13px; }
   .container { padding: 0 var(--spacing-md); }
-  .terminal-log { max-height: 300px; font-size: 12px; }
+  .terminal-log { max-height: 300px; font-size: 10px; }
+  .badge { font-size: 0.6rem; padding: 0.1rem 0.3rem; }
+  .person-badge { font-size: 0.65rem; padding: 0.15rem 0.4rem; }
 }
 
 @media (max-width: 480px) {
   html { font-size: 12px; }
   .container { padding: 0 var(--spacing-sm); }
+  .badge { font-size: 0.55rem; padding: 0.1rem 0.25rem; white-space: nowrap; }
+  .person-badge { font-size: 0.6rem; padding: 0.1rem 0.3rem; }
+  .panel-header { padding: var(--spacing-xs) var(--spacing-sm); font-size: 0.8rem; }
+  .terminal-log { max-height: 250px; font-size: 9px; padding: var(--spacing-sm); }
+  .terminal-log .log-line { font-size: 9px; }
+  button, .btn { font-size: 0.7rem; padding: 0.35rem 0.75rem; }
+}
+
+/* Touch-friendly targets on coarse pointer devices */
+@media (pointer: coarse) {
+  button, .btn, a, input, [role="button"], [tabindex="0"] {
+    min-height: 44px;
+  }
+  input { min-height: 44px; }
+  .person-badge .remove { min-width: 44px !important; min-height: 44px !important; display: inline-flex !important; align-items: center; justify-content: center; }
 }

@@ -1,5 +1,12 @@
 import type { ParsedName } from '$lib/types';
 
+// Compound last name prefixes - when followed by another capitalized word, these form a single last name
+const COMPOUND_PREFIXES = new Set([
+	'le', 'la', 'de', 'del', 'van', 'von', 'di', 'el', 'al', 'ben', 'ibn',
+	'mc', 'mac', 'st', 'san', 'den', 'der', 'het', 'ten', 'ter', 'los', 'las',
+	'da', 'das', 'do', 'dos', 'du',
+]);
+
 // Common words that are NOT names - used to filter false positives
 const NON_NAME_WORDS = new Set([
   'the', 'and', 'for', 'not', 'but', 'with', 'from', 'into', 'upon', 'that',
@@ -104,6 +111,21 @@ export function parseFullName(raw: string, source = ''): ParsedName | null {
     };
   }
 
+  // Handle compound last name prefixes (e.g., "Josh Le Vine" -> lastName="Le Vine")
+  if (parts.length >= 3) {
+    const penultimate = parts[parts.length - 2];
+    if (COMPOUND_PREFIXES.has(penultimate.toLowerCase())) {
+      const compoundLast = penultimate + ' ' + lastPart;
+      return {
+        firstName: firstPart,
+        lastName: compoundLast,
+        middleName: parts.length > 3 ? parts.slice(1, -2).join(' ') : undefined,
+        fullName: cleaned,
+        source,
+      };
+    }
+  }
+
   // Handle "First Middle Last" format
   return {
     firstName: firstPart,
@@ -146,15 +168,15 @@ export function extractNamesFromText(html: string, source: string): ParsedName[]
   }
 
   // Pattern 1: /s/ signature blocks (most reliable)
-  // Matches: "/s/ John Smith", "/s/ John A. Smith", "/s/ John Andrew Smith"
-  const sigPattern = /\/s\/\s+([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)*\s+[A-Z][a-z]+(?:\s+(?:Jr|Sr|II|III|IV)\.?)?)/g;
+  // Matches: "/s/ John Smith", "/s/ John A. Smith", "/s/ John Andrew Smith", "/s/ Josh Le Vine"
+  const sigPattern = /\/s\/\s+([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)*\s+(?:[A-Z][a-z]+\s+)?[A-Z][a-z]+(?:\s+(?:Jr|Sr|II|III|IV)\.?)?)/g;
   let match;
   while ((match = sigPattern.exec(text)) !== null) {
     addName(parseFullName(match[1], source));
   }
 
   // Pattern 2: "By: Name" in signature lines
-  const byPattern = /By:\s*(?:\/s\/\s*)?([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)*\s+[A-Z][a-z]+)/g;
+  const byPattern = /By:\s*(?:\/s\/\s*)?([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)*\s+(?:[A-Z][a-z]+\s+)?[A-Z][a-z]+)/g;
   while ((match = byPattern.exec(text)) !== null) {
     addName(parseFullName(match[1], source));
   }
@@ -162,7 +184,7 @@ export function extractNamesFromText(html: string, source: string): ParsedName[]
   // Pattern 3: Name, Title pattern (comma-separated on same line context)
   // "Albert Bourla, Chief Executive Officer"
   // "David M. Denton, Chief Financial Officer"
-  const nameTitlePattern = /([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)*\s+[A-Z][a-z]+)\s*,\s*(?:Chief|President|Vice|Executive|Senior|Director|Chairman|Chairwoman|Secretary|Treasurer|General\s+Counsel|Controller)/g;
+  const nameTitlePattern = /([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)*\s+(?:[A-Z][a-z]+\s+)?[A-Z][a-z]+)\s*,\s*(?:Chief|President|Vice|Executive|Senior|Director|Chairman|Chairwoman|Secretary|Treasurer|General\s+Counsel|Controller)/g;
   while ((match = nameTitlePattern.exec(text)) !== null) {
     addName(parseFullName(match[1], source));
   }
@@ -187,31 +209,31 @@ export function extractNamesFromText(html: string, source: string): ParsedName[]
 
   // Pattern 6: DEF 14A director/nominee lists - "Name Age Director Since"
   // These are structured as: "FirstName LastName digits digits"
-  const directorPattern = /([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)*\s+[A-Z][a-z]+)\s+\d{2,3}\s+\d{4}/g;
+  const directorPattern = /([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)*\s+(?:[A-Z][a-z]+\s+)?[A-Z][a-z]+)\s+\d{2,3}\s+\d{4}/g;
   while ((match = directorPattern.exec(text)) !== null) {
     addName(parseFullName(match[1], source));
   }
 
   // Pattern 7: "Name has served as" / "Name was appointed" / "Name joined"
-  const narrativePattern = /([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)*\s+[A-Z][a-z]+)\s+(?:has\s+served|was\s+appointed|joined|serves?\s+as|has\s+been|became|is\s+the|was\s+named|was\s+elected)/g;
+  const narrativePattern = /([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)*\s+(?:[A-Z][a-z]+\s+)?[A-Z][a-z]+)\s+(?:has\s+served|was\s+appointed|joined|serves?\s+as|has\s+been|became|is\s+the|was\s+named|was\s+elected)/g;
   while ((match = narrativePattern.exec(text)) !== null) {
     addName(parseFullName(match[1], source));
   }
 
   // Pattern 8: "Name resigned" / "Name departed" / "Name was terminated" / "Name stepped down"
-  const departurePattern = /([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)*\s+[A-Z][a-z]+)\s*,?\s*(?:resigned|departed|was\s+terminated|stepped\s+down|was\s+removed|was\s+replaced|left\s+the|ceased|retired)/g;
+  const departurePattern = /([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)*\s+(?:[A-Z][a-z]+\s+)?[A-Z][a-z]+)\s*,?\s*(?:resigned|departed|was\s+terminated|stepped\s+down|was\s+removed|was\s+replaced|left\s+the|ceased|retired)/g;
   while ((match = departurePattern.exec(text)) !== null) {
     addName(parseFullName(match[1], source));
   }
 
   // Pattern 9: "Name, [role] of [Company]" / "Name, a director" / "Name, the former"
-  const rolePattern = /([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)*\s+[A-Z][a-z]+)\s*,\s*(?:a\s+(?:director|member|partner|consultant|officer|former)|the\s+(?:former|current|then)|our\s+(?:former|current)|who\s+(?:served|was|is|has)|formerly)/g;
+  const rolePattern = /([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)*\s+(?:[A-Z][a-z]+\s+)?[A-Z][a-z]+)\s*,\s*(?:a\s+(?:director|member|partner|consultant|officer|former)|the\s+(?:former|current|then)|our\s+(?:former|current)|who\s+(?:served|was|is|has)|formerly)/g;
   while ((match = rolePattern.exec(text)) !== null) {
     addName(parseFullName(match[1], source));
   }
 
   // Pattern 10: "Name was [appointed/hired/retained] as"
-  const hiredPattern = /([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)*\s+[A-Z][a-z]+)\s+was\s+(?:appointed|hired|retained|engaged|named|elected|designated)\s+(?:as|to)/g;
+  const hiredPattern = /([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)*\s+(?:[A-Z][a-z]+\s+)?[A-Z][a-z]+)\s+was\s+(?:appointed|hired|retained|engaged|named|elected|designated)\s+(?:as|to)/g;
   while ((match = hiredPattern.exec(text)) !== null) {
     addName(parseFullName(match[1], source));
   }

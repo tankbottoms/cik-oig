@@ -83,6 +83,17 @@
 	let searchMode: 'entity' | 'person' = $state('entity');
 	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
+	// Person mode state
+	let selectedPersons: Array<{ firstName: string; lastName: string; middleName?: string; fullName: string }> = $state([
+		{ firstName: 'Daniel', lastName: 'Jung', middleName: 'F.', fullName: 'Daniel F. Jung' }
+	]);
+
+	// Entity pin + color grouping
+	const PASTEL_COLORS = ['#FFB3BA', '#FFDFBA', '#FFFFBA', '#BAFFC9', '#BAE1FF', '#E8BAFF', '#FFB3E6', '#C4C4C4'];
+	let entityGroups: Array<{ id: string; name: string; color: string; entityCiks: string[]; createdAt: number }> = $state([]);
+	let colorPickerTarget: string | null = $state(null);
+	let longPressTimer: ReturnType<typeof setTimeout> | undefined;
+
 	// Pre-pin Robert B. Spertell on mount and check against OIG
 	onMount(async () => {
 		const alreadyExists = $extractedNames.some(n => n.name.lastName.toLowerCase() === 'spertell');
@@ -141,14 +152,86 @@
 
 	function removeEntity(cik: string, name: string) {
 		selectedEntities = selectedEntities.filter(e => !(e.cik === cik && e.name === name));
+		rebuildGroups();
+	}
+
+	function addPersonBadge() {
+		const nameInput = query.trim();
+		if (!nameInput) return;
+		const parsed = parsePersonName(nameInput);
+		const fullName = `${parsed.firstName}${parsed.middleName ? ' ' + parsed.middleName : ''} ${parsed.lastName}`;
+		if (!selectedPersons.some(p => p.fullName.toLowerCase() === fullName.toLowerCase())) {
+			selectedPersons = [...selectedPersons, { ...parsed, fullName }];
+		}
+		query = '';
+	}
+
+	function removePerson(fullName: string) {
+		selectedPersons = selectedPersons.filter(p => p.fullName !== fullName);
+	}
+
+	function toggleEntityPin(cik: string, name: string) {
+		selectedEntities = selectedEntities.map(e =>
+			e.cik === cik && e.name === name ? { ...e, pinned: !e.pinned } : e
+		);
+	}
+
+	function setEntityColor(cik: string, name: string, color: string) {
+		selectedEntities = selectedEntities.map(e =>
+			e.cik === cik && e.name === name ? { ...e, color: color || undefined } : e
+		);
+		colorPickerTarget = null;
+		rebuildGroups();
+	}
+
+	function handlePinPointerDown(entityKey: string) {
+		longPressTimer = setTimeout(() => {
+			colorPickerTarget = colorPickerTarget === entityKey ? null : entityKey;
+		}, 500);
+	}
+
+	function handlePinPointerUp() {
+		if (longPressTimer) {
+			clearTimeout(longPressTimer);
+			longPressTimer = undefined;
+		}
+	}
+
+	function rebuildGroups() {
+		const colorMap = new Map<string, string[]>();
+		for (const e of selectedEntities) {
+			if (e.color) {
+				const ciks = colorMap.get(e.color) || [];
+				ciks.push(e.cik);
+				colorMap.set(e.color, ciks);
+			}
+		}
+		entityGroups = Array.from(colorMap.entries())
+			.filter(([_, ciks]) => ciks.length >= 2)
+			.map(([color, entityCiks]) => {
+				const existing = entityGroups.find(g => g.color === color);
+				return {
+					id: existing?.id || crypto.randomUUID(),
+					name: existing?.name || 'Group',
+					color,
+					entityCiks,
+					createdAt: existing?.createdAt || Date.now(),
+				};
+			});
+	}
+
+	function renameGroup(groupId: string, name: string) {
+		entityGroups = entityGroups.map(g => g.id === groupId ? { ...g, name } : g);
 	}
 
 	function clearSearch() {
 		// Always allow clearing, even mid-search
 		isSearching.set(false);
 		selectedEntities = [];
+		selectedPersons = [{ firstName: 'Daniel', lastName: 'Jung', middleName: 'F.', fullName: 'Daniel F. Jung' }];
 		query = '';
 		clearLog();
+		colorPickerTarget = null;
 		if ($extractedNames.filter(n => n.pinned).length === 0) {
 			searchActive = false;
 		}
@@ -174,9 +257,17 @@
 			}
 		} else if (e.key === 'Enter') {
 			e.preventDefault();
-			startPipeline();
-		} else if (e.key === 'Backspace' && query === '' && selectedEntities.length > 0) {
-			selectedEntities = selectedEntities.slice(0, -1);
+			if (searchMode === 'person' && query.trim()) {
+				addPersonBadge();
+			} else {
+				startPipeline();
+			}
+		} else if (e.key === 'Backspace' && query === '') {
+			if (searchMode === 'entity' && selectedEntities.length > 0) {
+				selectedEntities = selectedEntities.slice(0, -1);
+			} else if (searchMode === 'person' && selectedPersons.length > 0) {
+				selectedPersons = selectedPersons.slice(0, -1);
+			}
 		}
 	}
 
@@ -245,6 +336,7 @@
 		query = '';
 		dropdownVisible = false;
 		dropdownResults = [];
+		colorPickerTarget = null;
 		inputEl?.focus();
 	}
 
@@ -270,15 +362,15 @@
 		if ($isSearching) return;
 
 		if (searchMode === 'person') {
-			const nameInput = query.trim();
-			if (!nameInput) return;
+			if (selectedPersons.length === 0) return;
 			searchActive = true;
 			isSearching.set(true);
 			clearLog();
 			try {
-				const parsed = parsePersonName(nameInput);
-				addLog(`Searching OIG for "${parsed.lastName}, ${parsed.firstName}"...`, 'fetch');
-				await directNameSearch(`${parsed.firstName}${parsed.middleName ? ' ' + parsed.middleName : ''} ${parsed.lastName}`);
+				for (const person of selectedPersons) {
+					addLog(`Searching OIG for "${person.lastName}, ${person.firstName}"...`, 'fetch');
+					await directNameSearch(person.fullName);
+				}
 				const names = $extractedNames;
 				addLog(
 					`Complete. ${names.filter(n => n.oigStatus !== 'pending').length} checked, ${names.filter(n => n.oigStatus === 'match').length} matches found`,
@@ -528,6 +620,49 @@
 		return new Date(ts).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 	}
 
+	// C1: Filing popup
+	function openFilingPopup(url: string, form: string, date: string) {
+		window.open(url, `filing_${form}_${date}`, 'width=1000,height=700,scrollbars=yes,resizable=yes');
+	}
+
+	// C2: Settings
+	let settingsOpen = $state(false);
+
+	// C4: Entity grouping glyph
+	let groupPopupOpen = $state(false);
+	let groupTagInput = $state('');
+
+	function saveEntityGroup() {
+		if (!groupTagInput.trim()) return;
+		// Assign a random pastel color to all uncolored selected entities
+		const color = PASTEL_COLORS[Math.floor(Math.random() * PASTEL_COLORS.length)];
+		selectedEntities = selectedEntities.map(e =>
+			e.color ? e : { ...e, color }
+		);
+		rebuildGroups();
+		// Rename the newly created group
+		const newGroup = entityGroups.find(g => g.color === color);
+		if (newGroup) renameGroup(newGroup.id, groupTagInput.trim());
+		groupTagInput = '';
+		groupPopupOpen = false;
+	}
+
+	// C6: OIG collapse/dismiss
+	let dismissedMatches: Set<string> = $state(new Set());
+	let collapsedMatches: Set<string> = $state(new Set());
+
+	function toggleCollapseMatch(key: string) {
+		const next = new Set(collapsedMatches);
+		next.has(key) ? next.delete(key) : next.add(key);
+		collapsedMatches = next;
+	}
+
+	function dismissMatch(key: string) {
+		const next = new Set(dismissedMatches);
+		next.add(key);
+		dismissedMatches = next;
+	}
+
 	// Derived status counts
 	let clearCount = $derived($extractedNames.filter(n => n.oigStatus === 'clear').length);
 	let matchCount = $derived($extractedNames.filter(n => n.oigStatus === 'match').length);
@@ -535,9 +670,31 @@
 </script>
 
 <div class="app" class:search-active={searchActive}>
-	<button class="theme-toggle" onclick={toggleTheme} title="Toggle dark mode">
-		{darkMode ? 'LIGHT' : 'DARK'}
-	</button>
+	<div class="top-controls">
+		<button class="settings-toggle" onclick={() => settingsOpen = !settingsOpen} title="Settings">
+			<i class="fa-thin fa-gear"></i>
+		</button>
+		<button class="theme-toggle" onclick={toggleTheme} title="Toggle dark mode">
+			{darkMode ? 'LIGHT' : 'DARK'}
+		</button>
+	</div>
+
+	{#if settingsOpen}
+		<div class="settings-popup">
+			<div class="settings-header">
+				<span>Settings</span>
+				<button class="settings-close" onclick={() => settingsOpen = false}>x</button>
+			</div>
+			<div class="settings-body">
+				<div class="settings-row">
+					<span class="settings-label">Theme</span>
+					<button class="settings-btn" onclick={toggleTheme}>
+						{darkMode ? 'LIGHT' : 'DARK'}
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
 
 	<div class="search-wrapper" class:top={searchActive}>
 		{#if !searchActive}
@@ -581,11 +738,32 @@
 			<div class="search-input-wrapper">
 				{#if searchMode === 'entity'}
 					{#each selectedEntities as entity (`${entity.cik}_${entity.name}`)}
+						{@const entityKey = `${entity.cik}_${entity.name}`}
+						{@const entityGroup = entityGroups.find(g => g.entityCiks.includes(entity.cik))}
 						<span class="entity-badge-wrapper">
-							<span class="entity-badge">
+							<span class="entity-badge" style={entity.color ? `border-color: ${entity.color}; background: ${entity.color}20` : ''}>
 								{entity.name} | {entity.cik}
+								<button type="button" class="entity-pin-btn" class:pinned={entity.pinned}
+									onclick={() => toggleEntityPin(entity.cik, entity.name)}
+									onpointerdown={() => handlePinPointerDown(entityKey)}
+									onpointerup={handlePinPointerUp}
+									onpointerleave={handlePinPointerUp}
+									aria-label={entity.pinned ? 'Unpin' : 'Pin'}
+								><i class={entity.pinned ? 'fas fa-thumbtack' : 'fa-thin fa-thumbtack'}></i></button>
 								<button type="button" class="remove" onclick={() => removeEntity(entity.cik, entity.name)} aria-label="Remove {entity.name}">x</button>
 							</span>
+							{#if colorPickerTarget === entityKey}
+								<div class="color-picker-popup">
+									{#each PASTEL_COLORS as color}
+										<button type="button" class="color-swatch" style="background: {color}"
+											onclick={() => setEntityColor(entity.cik, entity.name, color)}
+											aria-label="Set color"></button>
+									{/each}
+									<button type="button" class="color-swatch color-swatch-clear"
+										onclick={() => setEntityColor(entity.cik, entity.name, '')}
+										aria-label="Clear color">x</button>
+								</div>
+							{/if}
 							<span class="entity-hover-popup">
 								<span class="hover-label">Entity</span>
 								<span class="hover-value">{entity.name}</span>
@@ -593,7 +771,45 @@
 								<span class="hover-value">{entity.cik}</span>
 								<span class="hover-label">EDGAR</span>
 								<a class="hover-link" href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={entity.cik}&type=&dateb=&owner=include&count=40" target="_blank" rel="noopener noreferrer">View on SEC EDGAR</a>
+								{#if entityGroup}
+									<span class="hover-label">Group</span>
+									<span class="hover-value">
+										<input type="text" class="group-name-input" value={entityGroup.name}
+											onchange={(e) => renameGroup(entityGroup.id, e.currentTarget.value)} />
+										({entityGroup.entityCiks.length} members)
+									</span>
+								{/if}
 							</span>
+						</span>
+					{/each}
+					{#if selectedEntities.length >= 3}
+						<button type="button" class="group-entities-btn"
+							onclick={() => groupPopupOpen = !groupPopupOpen}
+							title="Group entities">
+							<i class="fa-thin fa-layer-group"></i>
+						</button>
+						{#if groupPopupOpen}
+							<div class="group-popup">
+								<input class="group-name-input" placeholder="Group tag..." bind:value={groupTagInput} />
+								<button class="group-save-btn" onclick={saveEntityGroup}>TAG</button>
+								{#if entityGroups.length > 0}
+									<div class="group-list">
+										{#each entityGroups as group}
+											<div class="group-item">
+												<span class="group-color-dot" style="background: {group.color}"></span>
+												<span>{group.name} ({group.entityCiks.length})</span>
+											</div>
+										{/each}
+									</div>
+								{/if}
+							</div>
+						{/if}
+					{/if}
+				{:else}
+					{#each selectedPersons as person (person.fullName)}
+						<span class="person-badge">
+							{person.fullName}
+							<button type="button" class="remove" onclick={() => removePerson(person.fullName)} aria-label="Remove {person.fullName}">x</button>
 						</span>
 					{/each}
 				{/if}
@@ -605,11 +821,11 @@
 					onblur={searchMode === 'entity' ? onBlur : undefined}
 					onfocus={() => { if (searchMode === 'entity' && query.length >= 2) onInput(); }}
 					placeholder={searchMode === 'person'
-						? 'Enter name (Last, First or First Last)...'
+						? (selectedPersons.length > 0 ? 'Add another person...' : 'Enter name (Last, First or First Last)...')
 						: selectedEntities.length > 0 ? 'Add another entity or name...' : 'Search SEC entities by name or CIK...'}
 				/>
 			</div>
-			{#if selectedEntities.length > 0 || query.length > 0 || searchActive}
+			{#if selectedEntities.length > 0 || selectedPersons.length > 0 || query.length > 0 || searchActive}
 				<button class="clear-btn" onclick={clearSearch} title="Clear search">
 					CLEAR
 				</button>
@@ -617,7 +833,7 @@
 			<button
 				class="primary search-btn"
 				onclick={startPipeline}
-				disabled={$isSearching || (searchMode === 'entity' ? selectedEntities.length === 0 && query.trim().length === 0 : query.trim().length === 0)}
+				disabled={$isSearching || (searchMode === 'entity' ? selectedEntities.length === 0 && query.trim().length === 0 : selectedPersons.length === 0)}
 			>
 				{$isSearching ? 'SEARCHING...' : 'SEARCH'}
 			</button>
@@ -676,17 +892,14 @@
 							<div class="name-row" class:match-row-highlight={entry.oigStatus === 'match'}>
 								<div class="name-left">
 									<div class="name-primary">
-										<span class="name-hover-wrapper">
-											{#if entry.oigStatus === 'match' && entry.oigMatches?.[0]}
-												<a
-													href={buildOIGVerifyUrl(entry.oigMatches[0].lastName, entry.oigMatches[0].firstName)}
-													target="_blank"
-													rel="noopener noreferrer"
-													class="name-link match-link"
-												>{entry.name.fullName}</a>
-											{:else}
-												<span class="name-text">{entry.name.fullName}</span>
-											{/if}
+										<span class="name-hover-wrapper" tabindex="0" role="button">
+											<a
+												href={buildOIGVerifyUrl(entry.name.lastName, entry.name.firstName)}
+												target="_blank"
+												rel="noopener noreferrer"
+												class="name-link"
+												class:match-link={entry.oigStatus === 'match'}
+											>{entry.name.fullName}</a>
 											<span class="name-hover-popup">
 												<span class="hover-label">Full Name</span>
 												<span class="hover-value">{entry.name.fullName}</span>
@@ -727,6 +940,13 @@
 										<span class="badge {statusBadgeClass(entry.oigStatus)}">
 											{statusLabel(entry.oigStatus, entry.oigMatches)}
 										</span>
+										{#if entry.oigStatus === 'clear' || entry.oigStatus === 'possible_match'}
+											<a href={buildOIGVerifyUrl(entry.name.lastName, entry.name.firstName)}
+												target="_blank" rel="noopener noreferrer"
+												class="verify-icon-link" title="Verify on OIG">
+												<i class="fa-thin fa-arrow-up-right-from-square"></i>
+											</a>
+										{/if}
 									</div>
 									<div class="name-source text-xs text-muted">{entry.source}</div>
 								</div>
@@ -735,13 +955,12 @@
 									{#if entry.filings && entry.filings.length > 0}
 										<div class="filing-badges">
 											{#each entry.filings as filing (filing.accession)}
-												<a
-													href={filing.url}
-													target="_blank"
-													rel="noopener noreferrer"
+												<button
+													type="button"
 													class="filing-badge"
 													title="{filing.form} {filing.date}"
-												>{filing.form}</a>
+													onclick={() => openFilingPopup(filing.url, filing.form, filing.date)}
+												>{filing.form}</button>
 											{/each}
 										</div>
 									{/if}
@@ -761,75 +980,103 @@
 							<!-- OIG match details (inline under matched name) -->
 							{#if entry.oigMatches && entry.oigMatches.length > 0}
 								{#each entry.oigMatches as match}
+									{@const matchKey = `${entry.name.firstName}_${entry.name.lastName}_${match.exclType}`}
+									{#if !dismissedMatches.has(matchKey)}
+									<div class="oig-detail-header">
+										<button class="oig-collapse-btn" onclick={() => toggleCollapseMatch(matchKey)}>
+											{collapsedMatches.has(matchKey) ? '+' : '-'}
+										</button>
+										<span class="oig-detail-title">{match.firstName} {match.lastName} -- {formatExclType(match.exclType)}</span>
+										<button class="oig-dismiss-btn" onclick={() => dismissMatch(matchKey)} title="Dismiss">x</button>
+									</div>
+									{#if !collapsedMatches.has(matchKey)}
 									<div class="oig-detail">
-										<div class="oig-detail-grid">
-											<div class="oig-field">
-												<span class="oig-label">First Name</span>
-												<span class="oig-value">{match.firstName}</span>
-											</div>
-											<div class="oig-field">
-												<span class="oig-label">Middle Name</span>
-												<span class="oig-value">{match.midName || '-'}</span>
-											</div>
-											<div class="oig-field">
-												<span class="oig-label">Last Name</span>
-												<span class="oig-value">{match.lastName}</span>
-											</div>
-											<div class="oig-field">
-												<span class="oig-label">DOB</span>
-												<span class="oig-value">{formatOIGDate(match.dob) || 'Unknown'}</span>
-											</div>
-											<div class="oig-field">
-												<span class="oig-label">NPI</span>
-												<span class="oig-value">{match.npi || 'Unknown'}</span>
-											</div>
-											<div class="oig-field">
-												<span class="oig-label">UPIN</span>
-												<span class="oig-value">{match.upin || 'Unknown'}</span>
-											</div>
-											<div class="oig-field">
-												<span class="oig-label">General</span>
-												<span class="oig-value">{match.general || '-'}</span>
-											</div>
-											<div class="oig-field">
-												<span class="oig-label">Specialty</span>
-												<span class="oig-value">{match.specialty || '-'}</span>
-											</div>
-											<div class="oig-field oig-field-wide">
-												<span class="oig-label">Address</span>
-												<span class="oig-value">
-													{match.address}{match.city ? `, ${match.city}` : ''}{match.state ? `, ${match.state}` : ''} {match.zip || ''}
-												</span>
-											</div>
-											<div class="oig-field">
-												<span class="oig-label">Excl. Type</span>
-												<span class="oig-value oig-excl-type">{formatExclType(match.exclType)}</span>
-											</div>
-											<div class="oig-field">
-												<span class="oig-label">Excl. Date</span>
-												<span class="oig-value">{formatOIGDate(match.exclDate)}</span>
-											</div>
-											<div class="oig-field">
-												<span class="oig-label">Reinstatement</span>
-												<span class="oig-value">{formatOIGDate(match.reinDate) || 'None'}</span>
-											</div>
-											{#if match.waiverDate && match.waiverDate !== '00000000'}
-												<div class="oig-field">
-													<span class="oig-label">Waiver</span>
-													<span class="oig-value">{formatOIGDate(match.waiverDate)} ({match.waiverState})</span>
+										<div class="oig-sections">
+											<div class="oig-section">
+												<div class="oig-section-label">Identity</div>
+												<div class="oig-section-grid">
+													<div class="oig-field">
+														<span class="oig-label">Last Name</span>
+														<span class="oig-value">{match.lastName}</span>
+													</div>
+													<div class="oig-field">
+														<span class="oig-label">First Name</span>
+														<span class="oig-value">{match.firstName}</span>
+													</div>
+													<div class="oig-field">
+														<span class="oig-label">Middle</span>
+														<span class="oig-value">{match.midName || '-'}</span>
+													</div>
+													<div class="oig-field">
+														<span class="oig-label">DOB</span>
+														<span class="oig-value">{formatOIGDate(match.dob) || 'Unknown'}</span>
+													</div>
 												</div>
-											{:else}
-												<div class="oig-field">
-													<span class="oig-label">Waiver</span>
-													<span class="oig-value">-</span>
+											</div>
+											<div class="oig-section">
+												<div class="oig-section-label">Professional</div>
+												<div class="oig-section-grid">
+													<div class="oig-field">
+														<span class="oig-label">NPI</span>
+														<span class="oig-value">{match.npi || 'Unknown'}</span>
+													</div>
+													<div class="oig-field">
+														<span class="oig-label">UPIN</span>
+														<span class="oig-value">{match.upin || 'Unknown'}</span>
+													</div>
+													<div class="oig-field">
+														<span class="oig-label">General</span>
+														<span class="oig-value">{match.general || '-'}</span>
+													</div>
+													<div class="oig-field">
+														<span class="oig-label">Specialty</span>
+														<span class="oig-value">{match.specialty || '-'}</span>
+													</div>
+													{#if match.busName}
+														<div class="oig-field oig-field-wide">
+															<span class="oig-label">Business</span>
+															<span class="oig-value">{match.busName}</span>
+														</div>
+													{/if}
 												</div>
-											{/if}
-											{#if match.busName}
-												<div class="oig-field oig-field-wide">
-													<span class="oig-label">Business</span>
-													<span class="oig-value">{match.busName}</span>
+											</div>
+											<div class="oig-section">
+												<div class="oig-section-label">Location</div>
+												<div class="oig-section-grid">
+													<div class="oig-field oig-field-wide">
+														<span class="oig-label">Address</span>
+														<span class="oig-value">
+															{match.address}{match.city ? `, ${match.city}` : ''}{match.state ? `, ${match.state}` : ''} {match.zip || ''}
+														</span>
+													</div>
 												</div>
-											{/if}
+											</div>
+											<div class="oig-section">
+												<div class="oig-section-label">Exclusion</div>
+												<div class="oig-section-grid">
+													<div class="oig-field">
+														<span class="oig-label">Type</span>
+														<span class="oig-value oig-excl-type">{formatExclType(match.exclType)}</span>
+													</div>
+													<div class="oig-field">
+														<span class="oig-label">Date</span>
+														<span class="oig-value">{formatOIGDate(match.exclDate)}</span>
+													</div>
+													<div class="oig-field">
+														<span class="oig-label">Reinstatement</span>
+														<span class="oig-value">{formatOIGDate(match.reinDate) || 'None'}</span>
+													</div>
+													<div class="oig-field">
+													{#if match.waiverDate && match.waiverDate !== '00000000'}
+														<span class="oig-label">Waiver</span>
+														<span class="oig-value">{formatOIGDate(match.waiverDate)} ({match.waiverState})</span>
+													{:else}
+														<span class="oig-label">Waiver</span>
+														<span class="oig-value">-</span>
+													{/if}
+													</div>
+												</div>
+											</div>
 										</div>
 										<div class="oig-verify-link">
 											<a
@@ -840,6 +1087,8 @@
 											>Verify on OIG <i class="fa-thin fa-arrow-up-right-from-square"></i></a>
 										</div>
 									</div>
+									{/if}
+									{/if}
 								{/each}
 							{/if}
 						{/each}
@@ -948,11 +1197,96 @@
 		align-items: center;
 	}
 
-	.theme-toggle {
+	/* Top controls: settings gear + theme toggle */
+	.top-controls {
 		position: fixed;
-		top: 5em;
-		right: 5em;
+		top: var(--spacing-lg);
+		right: var(--spacing-lg);
 		z-index: 200;
+		display: flex;
+		gap: 0.35rem;
+		align-items: center;
+	}
+
+	.settings-toggle {
+		font-size: 1rem;
+		padding: 0.25rem 0.5rem;
+		background: none !important;
+		border: none !important;
+		box-shadow: none !important;
+		color: var(--color-text-muted);
+		cursor: pointer;
+	}
+
+	.settings-toggle:hover {
+		color: var(--color-text);
+		transform: none !important;
+		box-shadow: none !important;
+	}
+
+	.settings-popup {
+		position: fixed;
+		top: calc(var(--spacing-lg) + 2.5rem);
+		right: var(--spacing-lg);
+		z-index: 200;
+		min-width: 200px;
+		background: var(--color-bg);
+		border: 1px solid var(--color-border-dark);
+		box-shadow: 3px 3px 0px var(--color-shadow);
+	}
+
+	.settings-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: var(--spacing-xs) var(--spacing-sm);
+		border-bottom: 1px solid var(--color-border);
+		font-size: 0.75rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+
+	.settings-close {
+		background: none !important;
+		border: none !important;
+		box-shadow: none !important;
+		padding: 0.1rem 0.3rem !important;
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+		cursor: pointer;
+	}
+
+	.settings-close:hover {
+		color: var(--color-text);
+		transform: none !important;
+		box-shadow: none !important;
+	}
+
+	.settings-body {
+		padding: var(--spacing-sm);
+	}
+
+	.settings-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: var(--spacing-sm);
+	}
+
+	.settings-label {
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+	}
+
+	.settings-btn {
+		font-size: 0.65rem !important;
+		padding: 0.2rem 0.5rem !important;
+	}
+
+	.theme-toggle {
 		font-size: 0.7rem;
 		padding: 0.25rem 0.5rem;
 	}
@@ -1030,7 +1364,8 @@
 		box-shadow: 3px 3px 0px var(--color-shadow);
 	}
 
-	.entity-badge-wrapper:hover .entity-hover-popup {
+	.entity-badge-wrapper:hover .entity-hover-popup,
+	.entity-badge-wrapper:focus-within .entity-hover-popup {
 		display: grid;
 		grid-template-columns: auto 1fr;
 		gap: 0.15rem 0.5rem;
@@ -1058,7 +1393,8 @@
 		box-shadow: 3px 3px 0px var(--color-shadow);
 	}
 
-	.name-hover-wrapper:hover .name-hover-popup {
+	.name-hover-wrapper:hover .name-hover-popup,
+	.name-hover-wrapper:focus-within .name-hover-popup {
 		display: grid;
 		grid-template-columns: auto 1fr;
 		gap: 0.15rem 0.5rem;
@@ -1270,16 +1606,29 @@
 		flex-wrap: wrap;
 	}
 
-	.name-text { font-weight: 600; font-size: 0.9rem; }
-
 	.name-link {
 		font-weight: 600;
 		font-size: 0.9rem;
-		color: var(--color-error);
+		color: var(--color-text);
 		text-decoration: none;
 	}
 
 	.name-link:hover { text-decoration: underline; }
+
+	.name-link.match-link { color: var(--color-error); }
+
+	.verify-icon-link {
+		color: var(--color-text-muted);
+		font-size: 0.7rem;
+		text-decoration: none;
+		opacity: 0.5;
+		transition: opacity 0.15s;
+	}
+
+	.verify-icon-link:hover {
+		opacity: 1;
+		text-decoration: none;
+	}
 
 	.name-source { margin-top: 0.15rem; }
 
@@ -1343,14 +1692,124 @@
 		color: var(--scheme-shell);
 	}
 
+	/* Entity pin button */
+	.entity-pin-btn {
+		background: none !important;
+		border: none !important;
+		box-shadow: none !important;
+		padding: 0 0.15rem !important;
+		color: var(--color-text-muted);
+		opacity: 0.4;
+		font-size: 0.65rem;
+		cursor: pointer;
+		text-transform: none !important;
+		letter-spacing: 0 !important;
+	}
+
+	.entity-pin-btn:hover {
+		opacity: 0.8;
+		transform: none !important;
+		box-shadow: none !important;
+	}
+
+	.entity-pin-btn.pinned {
+		opacity: 1;
+		color: var(--scheme-shell);
+	}
+
+	/* Color picker */
+	.color-picker-popup {
+		position: absolute;
+		top: calc(100% + 4px);
+		left: 0;
+		z-index: 170;
+		display: flex;
+		gap: 0.25rem;
+		padding: var(--spacing-xs);
+		background: var(--color-bg);
+		border: 1px solid var(--color-border-dark);
+		box-shadow: 3px 3px 0px var(--color-shadow);
+	}
+
+	.color-swatch {
+		width: 1.5rem;
+		height: 1.5rem;
+		border: 1px solid var(--color-border-dark) !important;
+		box-shadow: none !important;
+		padding: 0 !important;
+		cursor: pointer;
+		font-size: 0.6rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		text-transform: none !important;
+		letter-spacing: 0 !important;
+		min-height: auto;
+	}
+
+	.color-swatch:hover {
+		transform: none !important;
+		box-shadow: 1px 1px 0px var(--color-shadow) !important;
+	}
+
+	.color-swatch-clear {
+		background: var(--color-bg) !important;
+		color: var(--color-text-muted);
+	}
+
+	/* Group name input */
+	.group-name-input {
+		font-family: var(--font-mono);
+		font-size: 0.72rem;
+		padding: 0.1rem 0.25rem;
+		border: 1px solid var(--color-border);
+		background: var(--color-bg);
+		color: var(--color-text);
+		width: 80px;
+		box-shadow: none;
+	}
+
+	.group-name-input:focus {
+		border-color: var(--color-border-dark);
+		box-shadow: none;
+	}
+
 	/* OIG detail card */
 	.oig-detail {
 		background: var(--color-bg-alt);
 		border-top: 1px solid var(--color-border);
-		padding: var(--spacing-sm) var(--spacing-md) var(--spacing-sm) calc(var(--spacing-md) + 1rem);
+		padding: var(--spacing-sm) var(--spacing-md);
 	}
 
-	.oig-detail-grid {
+	.oig-sections {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.oig-section {
+		padding-bottom: var(--spacing-xs);
+		margin-bottom: var(--spacing-xs);
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.oig-section:last-child {
+		border-bottom: none;
+		margin-bottom: 0;
+		padding-bottom: 0;
+	}
+
+	.oig-section-label {
+		font-family: var(--font-mono);
+		font-size: 0.6rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--color-text-muted);
+		margin-bottom: 0.2rem;
+		opacity: 0.7;
+	}
+
+	.oig-section-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
 		gap: 0.35rem var(--spacing-lg);
@@ -1394,6 +1853,110 @@
 	}
 
 	.oig-verify-link a:hover { text-decoration: underline; }
+
+	/* C6: OIG detail collapse/dismiss header */
+	.oig-detail-header {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+		padding: 0.3rem var(--spacing-md);
+		background: var(--color-bg-alt);
+		border-top: 1px solid var(--color-border);
+		font-size: 0.75rem;
+	}
+
+	.oig-detail-title {
+		flex: 1;
+		font-weight: 600;
+		font-size: 0.75rem;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		color: var(--color-text-muted);
+	}
+
+	.oig-collapse-btn,
+	.oig-dismiss-btn {
+		background: none !important;
+		border: none !important;
+		box-shadow: none !important;
+		padding: 0.1rem 0.35rem !important;
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--color-text-muted);
+		cursor: pointer;
+		font-family: var(--font-mono);
+		text-transform: none !important;
+		letter-spacing: 0 !important;
+	}
+
+	.oig-collapse-btn:hover,
+	.oig-dismiss-btn:hover {
+		color: var(--color-text);
+		transform: none !important;
+		box-shadow: none !important;
+	}
+
+	/* C4: Entity grouping glyph */
+	.group-entities-btn {
+		background: none !important;
+		border: none !important;
+		box-shadow: none !important;
+		padding: 0.2rem 0.4rem !important;
+		font-size: 0.85rem;
+		color: var(--color-text-muted);
+		cursor: pointer;
+		text-transform: none !important;
+		letter-spacing: 0 !important;
+	}
+
+	.group-entities-btn:hover {
+		color: var(--scheme-shell);
+		transform: none !important;
+		box-shadow: none !important;
+	}
+
+	.group-popup {
+		position: absolute;
+		top: calc(100% + 4px);
+		left: 0;
+		z-index: 170;
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
+		padding: var(--spacing-sm);
+		background: var(--color-bg);
+		border: 1px solid var(--color-border-dark);
+		box-shadow: 3px 3px 0px var(--color-shadow);
+		min-width: 180px;
+	}
+
+	.group-save-btn {
+		font-size: 0.65rem !important;
+		padding: 0.2rem 0.5rem !important;
+	}
+
+	.group-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+		border-top: 1px solid var(--color-border);
+		padding-top: var(--spacing-xs);
+	}
+
+	.group-item {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		font-size: 0.72rem;
+	}
+
+	.group-color-dot {
+		width: 0.6rem;
+		height: 0.6rem;
+		border-radius: 50%;
+		display: inline-block;
+		flex-shrink: 0;
+	}
 
 	/* Log */
 	.log-header {
@@ -1573,19 +2136,145 @@
 		border: 1px solid var(--color-border);
 	}
 
+	/* Touch-friendly targets */
+	@media (pointer: coarse) {
+		.theme-toggle { min-height: 44px; min-width: 44px; display: flex; align-items: center; justify-content: center; }
+		.settings-toggle { min-height: 44px; min-width: 44px; display: flex !important; align-items: center; justify-content: center; }
+		.oig-collapse-btn, .oig-dismiss-btn { min-height: 44px !important; min-width: 44px !important; display: flex !important; align-items: center; justify-content: center; }
+		.mode-toggle { min-height: 44px !important; }
+		.search-box button { min-height: 44px; }
+		.search-input-wrapper input { min-height: 44px; }
+		.pin-btn { min-width: 44px !important; min-height: 44px !important; display: flex !important; align-items: center; justify-content: center; }
+		.entity-badge .remove { min-width: 44px !important; min-height: 44px !important; display: inline-flex !important; align-items: center; justify-content: center; box-sizing: border-box; }
+		.oig-verify-link a { display: inline-flex; align-items: center; min-height: 44px; }
+		.filing-badge { min-height: 44px; display: inline-flex; align-items: center; }
+		.expand-btn { min-height: 44px !important; display: inline-flex !important; align-items: center; }
+		.name-hover-wrapper { min-height: 44px; display: inline-flex; align-items: center; }
+		.color-swatch { min-width: 44px !important; min-height: 44px !important; width: 44px; height: 44px; }
+		.entity-pin-btn { min-width: 44px !important; min-height: 44px !important; display: flex !important; align-items: center; justify-content: center; }
+	}
+
+	/* --- Tablet: 769px - 1024px --- */
+	@media (max-width: 1024px) {
+		.top-controls { top: var(--spacing-lg); right: var(--spacing-lg); }
+		.oig-section-grid { grid-template-columns: repeat(2, 1fr); gap: 0.35rem var(--spacing-md); }
+		.oig-detail { padding-left: var(--spacing-md); }
+	}
+
+	/* --- Mobile / small tablet: <= 768px --- */
 	@media (max-width: 768px) {
 		.search-wrapper { margin-top: 15vh; padding: 0 var(--spacing-md); }
-		.search-wrapper.top { max-width: 100%; }
-		.theme-toggle { top: var(--spacing-md); right: var(--spacing-md); }
+		.search-wrapper.top { max-width: 100%; padding: 0 var(--spacing-sm); }
+		.top-controls { top: var(--spacing-sm); right: var(--spacing-sm); }
+		.theme-toggle { font-size: 0.6rem; padding: 0.2rem 0.4rem; }
+		.settings-toggle { font-size: 0.85rem; }
+		.settings-popup { top: calc(var(--spacing-sm) + 2.5rem); right: var(--spacing-sm); }
 		.hero-title { font-size: 1.25rem; }
+		.hero-subtitle { font-size: 0.75rem; }
+		.hero-intro { font-size: 0.75rem; line-height: 1.5; }
+
+		/* Search box stacks vertically */
 		.search-box { flex-direction: column; }
 		.search-box button { border-left: none; border-top: 1px solid var(--color-border-dark); }
-		.mode-toggle { border-right: none !important; border-bottom: 1px solid var(--color-border-dark) !important; }
-		.oig-detail-grid { grid-template-columns: 1fr; }
-		.name-row { flex-direction: column; }
-		.name-right { align-self: flex-end; }
-		.explainer-table { font-size: 0.7rem; }
-		.compact-info-popup { width: 280px; }
-		.panel-header-flex { flex-direction: column; align-items: flex-start; }
+		.mode-toggle {
+			border-right: none !important;
+			border-bottom: 1px solid var(--color-border-dark) !important;
+			order: -1;
+			padding: 0.4rem 0.75rem !important;
+		}
+		.search-input-wrapper { padding: 0.4rem 0.5rem; }
+		.search-box .search-btn { padding: 0.6rem 1rem; }
+		.search-box .clear-btn { padding: 0.4rem 0.75rem; }
+
+		/* Entity badges wrap and shrink */
+		.entity-badge { font-size: 0.65rem; padding: 0.15rem 0.4rem; }
+		.entity-badge .remove { font-size: 0.6rem; }
+
+		/* OIG detail grid two columns at tablet width */
+		.oig-section-grid { grid-template-columns: repeat(2, 1fr); gap: 0.3rem var(--spacing-md); }
+		.oig-detail { padding: var(--spacing-sm); }
+
+		/* Name rows stack */
+		.name-row { flex-direction: column; gap: var(--spacing-xs); padding: var(--spacing-sm); }
+		.name-left { width: 100%; }
+		.name-primary { flex-wrap: wrap; gap: 0.35rem; }
+		.name-right {
+			width: 100%;
+			justify-content: space-between;
+			flex-direction: row-reverse;
+			padding-top: 0.25rem;
+		}
+
+		/* Filing badges wrap */
+		.filing-badges { flex-wrap: wrap; gap: 0.2rem; }
+		.filing-badge { font-size: 0.6rem; padding: 0.1rem 0.25rem; }
+
+		/* Explainer table scrollable */
+		.explainer-table { font-size: 0.7rem; display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+		.explainer-content { padding: var(--spacing-sm); }
+		.explainer-section p, .explainer-section ol, .explainer-section ul { font-size: 0.75rem; }
+
+		/* Info popup */
+		.compact-info-popup { width: 280px; font-size: 0.72rem; }
+
+		/* Panel header wraps */
+		.panel-header-flex { flex-direction: column; align-items: flex-start; gap: 0.3rem; }
+		.status-counts { flex-wrap: wrap; }
+
+		/* Hover popups - show on tap for touch */
+		.name-hover-popup, .entity-hover-popup { max-width: calc(100vw - 2rem); }
+
+		/* Reduce large margins */
+		.mt-3x { margin-top: var(--spacing-xl); }
+
+		/* Results container */
+		.results { padding-top: var(--spacing-sm); }
+	}
+
+	/* --- Small phone: <= 480px --- */
+	@media (max-width: 480px) {
+		.search-wrapper { margin-top: 10vh; padding: 0 var(--spacing-xs); }
+		.search-wrapper.top { padding: 0 var(--spacing-xs); }
+		.hero-title { font-size: 1.1rem; letter-spacing: 0.05em; }
+		.hero-subtitle { font-size: 0.7rem; }
+		.hero-count { font-size: 0.65rem; }
+		.hero-intro { font-size: 0.7rem; line-height: 1.45; margin-bottom: var(--spacing-md); }
+
+		/* Compact name display */
+		.name-link { font-size: 0.8rem; }
+		.name-source { font-size: 0.65rem; }
+		.oig-label { font-size: 0.6rem; }
+		.oig-value { font-size: 0.78rem; }
+		.oig-verify-link a { font-size: 0.7rem; }
+		.oig-detail { padding: var(--spacing-xs) var(--spacing-sm); }
+
+		/* OIG detail grid single column at small phone */
+		.oig-section-grid { grid-template-columns: repeat(2, 1fr); gap: 0.25rem var(--spacing-sm); }
+
+		/* Even smaller entity badges */
+		.entity-badge { font-size: 0.6rem; padding: 0.1rem 0.3rem; max-width: calc(100vw - 4rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+		/* Dropdown items more compact */
+		.search-dropdown .dropdown-item { padding: 0.4rem 0.5rem; font-size: 0.78rem; }
+
+		/* Explainer tighter */
+		.explainer-section h4 { font-size: 0.72rem; }
+		.explainer-section p, .explainer-section li { font-size: 0.7rem; line-height: 1.5; }
+		.explainer-table th, .explainer-table td { padding: 0.25rem 0.35rem; font-size: 0.65rem; }
+		.explainer-table code { font-size: 0.6rem; }
+
+		/* Panel adjustments */
+		.name-row { padding: var(--spacing-xs) var(--spacing-sm); }
+
+		/* Count badges smaller */
+		.count-badge { font-size: 0.55rem; padding: 0.1rem 0.3rem; }
+
+		/* Popups constrained */
+		.name-hover-popup, .entity-hover-popup, .compact-info-popup {
+			max-width: calc(100vw - 1.5rem);
+			width: auto;
+			min-width: 200px;
+		}
+		.compact-info-popup { left: -0.5rem; width: calc(100vw - 2rem); }
 	}
 </style>
