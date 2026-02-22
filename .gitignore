@@ -27,3 +27,6 @@ vite.config.ts.timestamp-*
 .playwright-cli
 .github-commit-messages
 .vercel
+
+# Git Worktrees
+.worktrees
