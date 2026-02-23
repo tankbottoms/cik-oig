@@ -72,6 +72,7 @@
 	let persistedFavorites = $state(loadFavorites());
 
 	$effect(() => {
+		console.log(`[SETTINGS-EFFECT] Running, settingsOpen=${settingsOpen}`);
 		if (settingsOpen) {
 			try {
 				console.log(`[SETTINGS] Loading favorites for settings panel`);
