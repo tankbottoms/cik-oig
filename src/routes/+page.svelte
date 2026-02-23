@@ -789,17 +789,22 @@
 	// Create new group
 	function saveEntityGroup() {
 		try {
+			console.log(`[GROUP] Starting saveEntityGroup with ${selectedEntities.length} entities`);
 			if (!groupTagInput.trim()) return;
 			const tagName = groupTagInput.trim();
+			console.log(`[GROUP] Tag name: "${tagName}"`);
+
 			// Pick a color not already in use
 			const usedColors = new Set(entityGroups.map(g => g.color));
 			const available = PASTEL_COLORS.filter(c => !usedColors.has(c));
 			const color = available.length > 0
 				? available[Math.floor(Math.random() * available.length)]
 				: PASTEL_COLORS[Math.floor(Math.random() * PASTEL_COLORS.length)];
+			console.log(`[GROUP] Assigned color: ${color}`);
 
 			// Assign color to all uncolored entities
 			selectedEntities = selectedEntities.map(e => e.color ? e : { ...e, color });
+			console.log(`[GROUP] Colored entities: ${selectedEntities.length}`);
 
 			// Build group directly
 			const newGroup = {
@@ -809,15 +814,19 @@
 				entityCiks: selectedEntities.filter(e => e.color === color).map(e => e.cik),
 				createdAt: Date.now(),
 			};
+			console.log(`[GROUP] New group created: ${newGroup.name} with ${newGroup.entityCiks.length} entities`);
 
 			// Merge with existing groups (rebuild from entity colors, then override name for this color)
 			rebuildGroups();
+			console.log(`[GROUP] Rebuilt groups: ${entityGroups.length}`);
+
 			entityGroups = entityGroups.map(g => g.color === color ? { ...g, name: tagName, id: newGroup.id } : g);
+			console.log(`[GROUP] Updated group name, completed`);
 
 			groupTagInput = '';
 			groupPopupOpen = false;
 		} catch (e) {
-			console.error('Error saving entity group:', e);
+			console.error('Error saving entity group:', e, e instanceof Error ? e.stack : '');
 		}
 	}
 
