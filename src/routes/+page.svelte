@@ -783,7 +783,6 @@
 			groupPopupOpen = false;
 		} catch (e) {
 			console.error('Error adding entities to group:', e);
-			alert('Error grouping entities. Click SETTINGS → CLEAR CACHE to reset.');
 		}
 	}
 
@@ -819,7 +818,6 @@
 			groupPopupOpen = false;
 		} catch (e) {
 			console.error('Error saving entity group:', e);
-			alert('Error creating group. Click SETTINGS → CLEAR CACHE to reset.');
 		}
 	}
 
@@ -911,9 +909,8 @@
 				entityGroups = [];
 				searchActive = false;
 				settingsOpen = false;
-				alert('Cache cleared. Page will reset.');
 			} catch (e) {
-				alert('Failed to clear cache: ' + String(e));
+				console.error('Failed to clear cache:', e);
 			}
 		}
 	}
