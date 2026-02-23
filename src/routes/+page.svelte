@@ -154,6 +154,8 @@
 	function handleDocumentClick(e: MouseEvent) {
 		const target = e.target as HTMLElement | null;
 		if (!target) return;
+		const targetClass = target.className;
+
 		// Close group popup if clicking outside it and its toggle button
 		if (groupPopupOpen) {
 			if (!target.closest?.('.group-popup') && !target.closest?.('.group-entities-btn')) {
@@ -168,7 +170,10 @@
 		}
 		// Close settings if clicking outside
 		if (settingsOpen) {
-			if (!target.closest?.('.settings-popup') && !target.closest?.('.settings-toggle')) {
+			const inSettings = target.closest?.('.settings-popup');
+			const isSettingsBtn = target.closest?.('.settings-toggle');
+			if (!inSettings && !isSettingsBtn) {
+				console.log(`[SETTINGS] Closing settings, clicked on: ${targetClass}`);
 				settingsOpen = false;
 			}
 		}
@@ -326,12 +331,13 @@
 			.filter(([_, ciks]) => ciks.length >= 1)
 			.map(([color, entityCiks]) => {
 				const existing = entityGroups.find(g => g.color === color);
+				const persisted = persistedFavorites?.groups?.find((g: any) => g.color === color);
 				return {
-					id: existing?.id || crypto.randomUUID(),
-					name: existing?.name || 'Group',
+					id: existing?.id || persisted?.id || crypto.randomUUID(),
+					name: existing?.name || persisted?.name || 'Group',
 					color,
 					entityCiks,
-					createdAt: existing?.createdAt || Date.now(),
+					createdAt: existing?.createdAt || persisted?.createdAt || Date.now(),
 				};
 			});
 	}
@@ -776,9 +782,9 @@
 			const group = entityGroups.find(g => g.id === groupId);
 			if (!group) return;
 
-			// Assign group's color to all currently uncolored selected entities
+			// Apply group color to all uncolored selected entities
 			selectedEntities = selectedEntities.map(e => {
-				if (!e.color && !group.entityCiks.includes(e.cik)) {
+				if (!e.color) {
 					return { ...e, color: group.color };
 				}
 				return e;
@@ -936,7 +942,11 @@
 
 <div class="app" class:search-active={searchActive}>
 	<div class="top-controls">
-		<button class="settings-toggle" onclick={() => settingsOpen = !settingsOpen} title="Settings">
+		<button class="settings-toggle" onclick={() => {
+			console.log(`[SETTINGS] Clicked, current state: ${settingsOpen}, searchActive: ${searchActive}`);
+			settingsOpen = !settingsOpen;
+			console.log(`[SETTINGS] New state: ${settingsOpen}`);
+		}} title="Settings">
 			<i class="fa-thin fa-gear"></i>
 		</button>
 		<button class="theme-toggle" onclick={toggleTheme} title="Toggle dark mode">
@@ -979,7 +989,7 @@
 						{#each persistedFavorites.groups as group (group.id)}
 							<div class="settings-group-row">
 								<span class="group-color-dot" style="background: {group.color}"></span>
-								<span class="settings-group-name">{group.name}</span>
+								<span class="settings-group-name">{group.name} Entities ({group.entityCiks.length})</span>
 								<button class="settings-fav-add" onclick={() => quickLoadGroup(group)} title="Load group">LOAD</button>
 							</div>
 						{/each}
@@ -1306,20 +1316,20 @@
 												{/if}
 											</span>
 										</span>
-										<span class="badge {statusBadgeClass(entry.oigStatus)}">
-											{statusLabel(entry.oigStatus, entry.oigMatches)}
-										</span>
-										{#if entry.oigStatus === 'clear' || entry.oigStatus === 'possible_match'}
-											<a href={buildOIGVerifyUrl(entry.name.lastName, entry.name.firstName)}
-												target="_blank" rel="noopener noreferrer"
-												class="verify-icon-link" title="Verify on OIG">
-												<i class="fa-thin fa-arrow-up-right-from-square"></i>
-											</a>
-										{/if}
 									</div>
 									<div class="name-source text-xs text-muted">{entry.source}</div>
 								</div>
 								<div class="name-right">
+									<span class="badge {statusBadgeClass(entry.oigStatus)}">
+										{statusLabel(entry.oigStatus, entry.oigMatches)}
+									</span>
+									{#if entry.oigStatus === 'clear' || entry.oigStatus === 'possible_match'}
+										<a href={buildOIGVerifyUrl(entry.name.lastName, entry.name.firstName)}
+											target="_blank" rel="noopener noreferrer"
+											class="verify-icon-link" title="Verify on OIG">
+											<i class="fa-thin fa-arrow-up-right-from-square"></i>
+										</a>
+									{/if}
 									<!-- Filing badges -->
 									{#if entry.filings && entry.filings.length > 0}
 										<div class="filing-badges">
@@ -1352,8 +1362,8 @@
 									{@const matchKey = `${entry.name.firstName}_${entry.name.lastName}_${match.exclType}`}
 									{#if !dismissedMatches.has(matchKey)}
 									<div class="oig-detail-header">
-										<button class="oig-collapse-btn" onclick={() => toggleCollapseMatch(matchKey)}>
-											{collapsedMatches.has(matchKey) ? '+' : '-'}
+										<button class="oig-collapse-btn" onclick={() => toggleCollapseMatch(matchKey)} title="Toggle details">
+											<i class={collapsedMatches.has(matchKey) ? 'fa-thin fa-caret-right' : 'fa-thin fa-caret-down'}></i>
 										</button>
 										<span class="oig-detail-title">{match.firstName} {match.lastName} -- {formatExclType(match.exclType)}</span>
 										<button class="oig-dismiss-btn" onclick={() => dismissMatch(matchKey)} title="Dismiss">x</button>
@@ -1414,7 +1424,7 @@
 												<div class="oig-section-grid">
 													<div class="oig-field oig-field-wide">
 														<span class="oig-label">Address</span>
-														<span class="oig-value">
+														<span class="oig-value oig-address">
 															{match.address}{match.city ? `, ${match.city}` : ''}{match.state ? `, ${match.state}` : ''} {match.zip || ''}
 														</span>
 													</div>
@@ -1633,7 +1643,7 @@
 	}
 
 	.settings-body {
-		padding: var(--spacing-sm);
+		padding: var(--spacing-xs) var(--spacing-sm);
 	}
 
 	.settings-row {
@@ -1641,6 +1651,8 @@
 		justify-content: space-between;
 		align-items: center;
 		gap: var(--spacing-sm);
+		margin-bottom: 0;
+		padding: 0.15rem 0;
 	}
 
 	.settings-label {
@@ -2202,6 +2214,10 @@
 		font-weight: 400;
 	}
 
+	.oig-address {
+		font-size: 0.7rem;
+	}
+
 	.oig-excl-type {
 		color: var(--color-error);
 		font-weight: 600;
@@ -2552,7 +2568,7 @@
 		.search-box button { min-height: 44px; }
 		.search-input-wrapper input { min-height: 44px; }
 		.pin-btn { min-width: 44px !important; min-height: 44px !important; display: flex !important; align-items: center; justify-content: center; }
-		.entity-badge .remove { min-width: 44px !important; min-height: 44px !important; display: inline-flex !important; align-items: center; justify-content: center; box-sizing: border-box; }
+		.entity-badge .remove { min-width: 32px !important; min-height: 32px !important; display: inline-flex !important; align-items: center; justify-content: center; box-sizing: border-box; }
 		.oig-verify-link a { display: inline-flex; align-items: center; min-height: 44px; }
 		.filing-badge { min-height: 44px; display: inline-flex; align-items: center; }
 		.expand-btn { min-height: 44px !important; display: inline-flex !important; align-items: center; }
@@ -2637,8 +2653,21 @@
 		/* Entity summary responsive */
 		.entity-summary-row { flex-direction: column; gap: var(--spacing-xs); }
 		.entity-summary-right { width: 100%; justify-content: flex-end; }
+		.entity-summary-meta { font-size: 0.6rem; }
+		.entity-summary-link { font-size: 0.8rem; }
+		.entity-summary-forms .filing-badge { font-size: 0.55rem; padding: 0.05rem 0.2rem; }
 
-				/* Results container */
+		/* Name sizing hierarchy */
+		.name-link { font-size: 0.85rem; }
+		.filing-badge { font-size: 0.55rem; }
+
+		/* Settings buttons consistent sizing */
+		.settings-btn {
+			font-size: 0.65rem !important;
+			padding: 0.2rem 0.5rem !important;
+		}
+
+		/* Results container */
 		.results { padding-top: var(--spacing-sm); }
 	}
 
@@ -2652,10 +2681,14 @@
 		.hero-intro { font-size: 0.7rem; line-height: 1.45; margin-bottom: var(--spacing-md); }
 
 		/* Compact name display */
-		.name-link { font-size: 0.8rem; }
+		.name-link { font-size: 0.82rem; font-weight: 700; }
 		.name-source { font-size: 0.65rem; }
 		.oig-label { font-size: 0.6rem; }
 		.oig-value { font-size: 0.78rem; }
+		.oig-address { font-size: 0.6rem; word-break: break-word; }
+		.entity-summary-meta { font-size: 0.55rem; }
+		.entity-summary-link { font-size: 0.75rem; }
+		.filing-badge { font-size: 0.5rem; padding: 0.05rem 0.2rem; }
 		.oig-verify-link a { font-size: 0.7rem; }
 		.oig-detail { padding: var(--spacing-xs) var(--spacing-sm); }
 
@@ -2663,7 +2696,7 @@
 		.oig-section-grid { grid-template-columns: repeat(2, 1fr); gap: 0.25rem var(--spacing-sm); }
 
 		/* Even smaller entity badges */
-		.entity-badge { font-size: 0.6rem; padding: 0.1rem 0.3rem; max-width: calc(100vw - 4rem); }
+		.entity-badge { font-size: 0.6rem; padding: 0.1rem 0.3rem; line-height: 1.2; max-width: calc(100vw - 4rem); }
 
 		/* Dropdown items more compact */
 		.search-dropdown .dropdown-item { padding: 0.4rem 0.5rem; font-size: 0.78rem; }
@@ -2673,6 +2706,14 @@
 		.explainer-section p, .explainer-section li { font-size: 0.7rem; line-height: 1.5; }
 		.explainer-table th, .explainer-table td { padding: 0.25rem 0.35rem; font-size: 0.65rem; }
 		.explainer-table code { font-size: 0.6rem; }
+
+		/* Settings buttons consistent sizing */
+		.settings-btn {
+			font-size: 0.65rem !important;
+			padding: 0.2rem 0.5rem !important;
+			min-height: auto !important;
+		}
+		.settings-row { gap: var(--spacing-xs); }
 
 		/* Panel adjustments */
 		.name-row { padding: var(--spacing-xs) var(--spacing-sm); }
@@ -2690,14 +2731,14 @@
 	}
 	/* Settings panel sections */
 	.settings-popup { min-width: 280px; max-height: 80vh; overflow-y: auto; }
-	.settings-section { margin-top: var(--spacing-sm); padding-top: var(--spacing-sm); border-top: 1px solid var(--color-border); }
+	.settings-section { margin-top: var(--spacing-xs); padding-top: var(--spacing-xs); border-top: 1px solid var(--color-border); }
 	.settings-section-label { font-size: 0.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); margin-bottom: 0.35rem; }
-	.settings-favorite-row { display: flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0; font-size: 0.72rem; }
+	.settings-favorite-row { display: flex; align-items: center; gap: 0.35rem; padding: 0.1rem 0; font-size: 0.72rem; }
 	.settings-fav-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 	.settings-fav-cik { color: var(--color-text-muted); font-family: var(--font-mono); font-size: 0.65rem; }
 	.settings-fav-add { background: none !important; border: none !important; box-shadow: none !important; padding: 0.1rem 0.3rem !important; font-size: 0.7rem; color: var(--color-text-muted); cursor: pointer; font-family: var(--font-mono); text-transform: none !important; letter-spacing: 0 !important; }
 	.settings-fav-add:hover { color: var(--color-text); transform: none !important; box-shadow: none !important; }
-	.settings-group-row { display: flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0; font-size: 0.72rem; }
+	.settings-group-row { display: flex; align-items: center; gap: 0.35rem; padding: 0.1rem 0; font-size: 0.72rem; }
 	.settings-group-name { flex: 1; font-weight: 600; }
 	.settings-danger { color: var(--color-error) !important; border-color: var(--color-error) !important; }
 	.mt-sm { margin-top: var(--spacing-sm); }

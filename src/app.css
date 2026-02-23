@@ -410,5 +410,11 @@ input:focus, textarea:focus {
     min-height: 44px;
   }
   input { min-height: 44px; }
-  .person-badge .remove { min-width: 44px !important; min-height: 44px !important; display: inline-flex !important; align-items: center; justify-content: center; }
+  .entity-badge .remove, .person-badge .remove {
+    min-height: 32px !important;
+    min-width: 32px !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+  }
 }
