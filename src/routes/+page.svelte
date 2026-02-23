@@ -899,7 +899,7 @@
 
 	// Settings panel helpers
 	function quickAddEntity(entity: SelectedEntity) {
-		if (!selectedEntities.some(e => e.cik === entity.cik)) {
+		if (!selectedEntities.some(e => e.cik === entity.cik && e.name === entity.name)) {
 			selectedEntities = [...selectedEntities, entity];
 		}
 		if (!searchActive) searchActive = true;
@@ -908,7 +908,7 @@
 	function quickLoadGroup(group: any) {
 		const savedEntities = (persistedFavorites?.entities ?? []).filter(e => group.entityCiks.includes(e.cik));
 		for (const entity of savedEntities) {
-			if (!selectedEntities.some(e => e.cik === entity.cik)) {
+			if (!selectedEntities.some(e => e.cik === entity.cik && e.name === entity.name)) {
 				selectedEntities = [...selectedEntities, { ...entity, color: group.color }];
 			}
 		}
