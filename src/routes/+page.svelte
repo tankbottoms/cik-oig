@@ -2057,6 +2057,43 @@
 		font-size: 0.72rem;
 	}
 
+	.group-section-label {
+		font-size: 0.6rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--color-text-muted);
+		margin-bottom: 0.2rem;
+	}
+
+	.group-item-clickable {
+		width: 100%;
+		background: none !important;
+		border: none !important;
+		border-bottom: 1px solid var(--color-border) !important;
+		box-shadow: none !important;
+		padding: 0.35rem var(--spacing-xs) !important;
+		text-align: left;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		font-size: 0.72rem;
+		text-transform: none !important;
+		letter-spacing: 0 !important;
+	}
+
+	.group-item-clickable:hover {
+		background: var(--color-hover-bg) !important;
+		transform: none !important;
+		box-shadow: none !important;
+	}
+
+	.group-divider {
+		border-top: 1px solid var(--color-border);
+		margin: var(--spacing-xs) 0;
+	}
+
 	.group-color-dot {
 		width: 0.6rem;
 		height: 0.6rem;
