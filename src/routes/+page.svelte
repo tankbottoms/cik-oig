@@ -73,7 +73,13 @@
 
 	$effect(() => {
 		if (settingsOpen) {
-			persistedFavorites = loadFavorites();
+			try {
+				console.log(`[SETTINGS] Loading favorites for settings panel`);
+				persistedFavorites = loadFavorites();
+				console.log(`[SETTINGS] Loaded: ${persistedFavorites?.entities?.length || 0} entities, ${persistedFavorites?.groups?.length || 0} groups`);
+			} catch (e) {
+				console.error(`[SETTINGS] Error loading favorites:`, e);
+			}
 		}
 	});
 
