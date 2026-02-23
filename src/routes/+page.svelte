@@ -72,15 +72,21 @@
 	let persistedFavorites = $state(loadFavorites());
 
 	$effect(() => {
-		console.log(`[SETTINGS-EFFECT] Running, settingsOpen=${settingsOpen}`);
-		if (settingsOpen) {
-			try {
-				console.log(`[SETTINGS] Loading favorites for settings panel`);
-				persistedFavorites = loadFavorites();
-				console.log(`[SETTINGS] Loaded: ${persistedFavorites?.entities?.length || 0} entities, ${persistedFavorites?.groups?.length || 0} groups`);
-			} catch (e) {
-				console.error(`[SETTINGS] Error loading favorites:`, e);
+		try {
+			console.log(`[SETTINGS-EFFECT] Running, settingsOpen=${settingsOpen}`);
+			if (settingsOpen) {
+				try {
+					console.log(`[SETTINGS] Loading favorites for settings panel`);
+					const loaded = loadFavorites();
+					console.log(`[SETTINGS] loadFavorites returned:`, loaded);
+					persistedFavorites = loaded;
+					console.log(`[SETTINGS] Loaded: ${persistedFavorites?.entities?.length || 0} entities, ${persistedFavorites?.groups?.length || 0} groups`);
+				} catch (e) {
+					console.error(`[SETTINGS] Error loading favorites:`, e);
+				}
 			}
+		} catch (e) {
+			console.error(`[SETTINGS-EFFECT] Effect error:`, e);
 		}
 	});
 
