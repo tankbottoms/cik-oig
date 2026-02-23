@@ -114,13 +114,9 @@
 	let groupPopupRef: HTMLDivElement | undefined = $state();
 	let groupBtnRef: HTMLButtonElement | undefined = $state();
 
-	// Auto-persist pinned entities + close stale popups on entity change
+	// Auto-persist pinned entities
 	$effect(() => {
 		savePinnedEntities(selectedEntities);
-		// Close color picker if the target entity was removed
-		if (colorPickerTarget && !selectedEntities.some(e => `${e.cik}_${e.name}` === colorPickerTarget)) {
-			colorPickerTarget = null;
-		}
 	});
 
 	// Auto-persist groups
@@ -140,19 +136,25 @@
 
 	// Close popups on click-outside
 	function handleDocumentClick(e: MouseEvent) {
-		const target = e.target as HTMLElement;
+		const target = e.target as HTMLElement | null;
+		if (!target) return;
 		// Close group popup if clicking outside it and its toggle button
-		if (groupPopupOpen && groupPopupRef && groupBtnRef &&
-			!groupPopupRef.contains(target) && !groupBtnRef.contains(target)) {
-			groupPopupOpen = false;
+		if (groupPopupOpen) {
+			if (!target.closest?.('.group-popup') && !target.closest?.('.group-entities-btn')) {
+				groupPopupOpen = false;
+			}
 		}
 		// Close color picker if clicking outside any color picker
-		if (colorPickerTarget && !target.closest('.color-picker-popup') && !target.closest('.entity-pin-btn')) {
-			colorPickerTarget = null;
+		if (colorPickerTarget) {
+			if (!target.closest?.('.color-picker-popup') && !target.closest?.('.entity-pin-btn')) {
+				colorPickerTarget = null;
+			}
 		}
 		// Close settings if clicking outside
-		if (settingsOpen && !target.closest('.settings-popup') && !target.closest('.settings-toggle')) {
-			settingsOpen = false;
+		if (settingsOpen) {
+			if (!target.closest?.('.settings-popup') && !target.closest?.('.settings-toggle')) {
+				settingsOpen = false;
+			}
 		}
 	}
 
@@ -222,10 +224,15 @@
 		query = '';
 		dropdownVisible = false;
 		dropdownResults = [];
-		inputEl?.focus();
+		colorPickerTarget = null;
+		tick().then(() => {
+			if (inputEl) inputEl.value = '';
+			inputEl?.focus();
+		});
 	}
 
 	function removeEntity(cik: string, name: string) {
+		if (colorPickerTarget === `${cik}_${name}`) colorPickerTarget = null;
 		selectedEntities = selectedEntities.filter(e => !(e.cik === cik && e.name === name));
 		rebuildGroups();
 	}
@@ -2028,13 +2035,14 @@
 		background: none !important;
 		border: none !important;
 		box-shadow: none !important;
-		padding: 0 0.15rem !important;
+		padding: 0.15rem 0.25rem !important;
 		color: var(--color-text-muted);
-		opacity: 0.4;
+		opacity: 0.5;
 		font-size: 0.65rem;
 		cursor: pointer;
 		text-transform: none !important;
 		letter-spacing: 0 !important;
+		flex-shrink: 0;
 	}
 
 	.entity-pin-btn:hover {
@@ -2624,7 +2632,7 @@
 		.oig-section-grid { grid-template-columns: repeat(2, 1fr); gap: 0.25rem var(--spacing-sm); }
 
 		/* Even smaller entity badges */
-		.entity-badge { font-size: 0.6rem; padding: 0.1rem 0.3rem; max-width: calc(100vw - 4rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+		.entity-badge { font-size: 0.6rem; padding: 0.1rem 0.3rem; max-width: calc(100vw - 4rem); }
 
 		/* Dropdown items more compact */
 		.search-dropdown .dropdown-item { padding: 0.4rem 0.5rem; font-size: 0.78rem; }
