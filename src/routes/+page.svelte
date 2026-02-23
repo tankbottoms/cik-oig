@@ -3,7 +3,7 @@
 	import { fuzzyMatch } from '$lib/search/fuzzy-match';
 	import { logLines, extractedNames, isSearching, addLog, clearLog } from '$lib/stores';
 	import type { HealthcareEntity, SelectedEntity, SECSubmission, ParsedName, ExtractedNameResult, OIGSearchResult, FilingRef, SearchMode, PersistedFavorites } from '$lib/types';
-	import { loadFavorites, savePinnedEntities, saveGroups, savePinnedPersons, saveSettings, clearAllPersisted, saveFavorites } from '$lib/persistence';
+	import { loadFavorites, savePinnedEntities, saveGroups, savePinnedPersons, saveSettings, saveFavorites } from '$lib/persistence';
 
 	// Auto-scroll terminal log
 	$effect(() => {
@@ -70,6 +70,13 @@
 
 	// Load persisted favorites on init
 	const favorites = loadFavorites();
+	let persistedFavorites = $state(loadFavorites());
+
+	$effect(() => {
+		if (settingsOpen) {
+			persistedFavorites = loadFavorites();
+		}
+	});
 
 	// State - MW Medical pre-loaded as default entity
 	let query = $state('');
@@ -252,7 +259,7 @@
 			}
 		}
 		entityGroups = Array.from(colorMap.entries())
-			.filter(([_, ciks]) => ciks.length >= 2)
+			.filter(([_, ciks]) => ciks.length >= 1)
 			.map(([color, entityCiks]) => {
 				const existing = entityGroups.find(g => g.color === color);
 				return {
@@ -494,6 +501,7 @@
 	}
 
 	async function processEntity(entity: SelectedEntity) {
+		recordEntityHistory(entity);
 		addLog(`Fetching submissions for CIK ${entity.cik}...`, 'fetch');
 		const resp = await fetch(`/api/submissions/${entity.cik}`);
 		if (!resp.ok) { addLog(`Failed to fetch submissions: ${resp.statusText}`, 'error'); return; }
@@ -504,6 +512,23 @@
 		const dateRange = `${sub.filings[0].date} to ${sub.filings[sub.filings.length - 1].date}`;
 		addLog(`Found ${sub.filings.length} filings (${dateRange})`, 'found');
 		if (sub.sic) addLog(`SIC: ${sub.sic} - ${sub.sicDescription}`, 'info');
+
+		// Populate entity with filing metadata
+		const filingDates = sub.filings.map(f => f.date).sort();
+		const formTypes = new Set<string>();
+		sub.filings.forEach(f => formTypes.add(f.form));
+		selectedEntities = selectedEntities.map(e =>
+			e.cik === entity.cik ? {
+				...e,
+				earliestFiling: filingDates[0] || '',
+				latestFiling: filingDates[filingDates.length - 1] || '',
+				filingCount: sub.filings.length,
+				sicCode: sub.sic,
+				sicDescription: sub.sicDescription,
+				tickers: sub.tickers,
+				formTypes: Array.from(formTypes),
+			} : e
+		);
 
 		const priorityFilings = [...sub.filings]
 			.sort((a, b) => filingPriority(a.form) - filingPriority(b.form))
@@ -696,15 +721,30 @@
 	// Create new group
 	function saveEntityGroup() {
 		if (!groupTagInput.trim()) return;
-		// Assign a random pastel color to all uncolored selected entities
-		const color = PASTEL_COLORS[Math.floor(Math.random() * PASTEL_COLORS.length)];
-		selectedEntities = selectedEntities.map(e =>
-			e.color ? e : { ...e, color }
-		);
+		const tagName = groupTagInput.trim();
+		// Pick a color not already in use
+		const usedColors = new Set(entityGroups.map(g => g.color));
+		const available = PASTEL_COLORS.filter(c => !usedColors.has(c));
+		const color = available.length > 0
+			? available[Math.floor(Math.random() * available.length)]
+			: PASTEL_COLORS[Math.floor(Math.random() * PASTEL_COLORS.length)];
+
+		// Assign color to all uncolored entities
+		selectedEntities = selectedEntities.map(e => e.color ? e : { ...e, color });
+
+		// Build group directly
+		const newGroup = {
+			id: crypto.randomUUID(),
+			name: tagName,
+			color,
+			entityCiks: selectedEntities.filter(e => e.color === color).map(e => e.cik),
+			createdAt: Date.now(),
+		};
+
+		// Merge with existing groups (rebuild from entity colors, then override name for this color)
 		rebuildGroups();
-		// Rename the newly created group
-		const newGroup = entityGroups.find(g => g.color === color);
-		if (newGroup) renameGroup(newGroup.id, groupTagInput.trim());
+		entityGroups = entityGroups.map(g => g.color === color ? { ...g, name: tagName, id: newGroup.id } : g);
+
 		groupTagInput = '';
 		groupPopupOpen = false;
 	}
@@ -737,6 +777,17 @@
 	let matchCount = $derived($extractedNames.filter(n => n.oigStatus === 'match').length);
 	let possibleCount = $derived($extractedNames.filter(n => n.oigStatus === 'possible_match').length);
 
+	// Record entity to history
+	function recordEntityHistory(entity: SelectedEntity) {
+		const fav = loadFavorites();
+		const history = fav.entityHistory ?? [];
+		const alreadyThere = history.some(e => e.cik === entity.cik);
+		if (!alreadyThere) {
+			fav.entityHistory = [entity, ...history].slice(0, 200);
+			saveFavorites(fav);
+		}
+	}
+
 	// Settings panel helpers
 	function quickAddEntity(entity: SelectedEntity) {
 		if (!selectedEntities.some(e => e.cik === entity.cik)) {
@@ -746,7 +797,7 @@
 	}
 
 	function quickLoadGroup(group: any) {
-		const savedEntities = favorites.entities.filter(e => group.entityCiks.includes(e.cik));
+		const savedEntities = persistedFavorites.entities.filter(e => group.entityCiks.includes(e.cik));
 		for (const entity of savedEntities) {
 			if (!selectedEntities.some(e => e.cik === entity.cik)) {
 				selectedEntities = [...selectedEntities, { ...entity, color: group.color }];
@@ -763,9 +814,16 @@
 	}
 
 	function clearAllData() {
-		if (confirm('Clear all persisted data? This cannot be undone.')) {
-			clearAllPersisted();
-			window.location.reload();
+		if (confirm('Clear all pinned entities, groups, and history?')) {
+			saveFavorites({
+				version: 1,
+				entities: [],
+				groups: [],
+				persons: [],
+				entityHistory: [],
+				settings: persistedFavorites.settings,
+			});
+			persistedFavorites = loadFavorites();
 		}
 	}
 </script>
@@ -792,6 +850,54 @@
 					<button class="settings-btn" onclick={toggleTheme}>
 						{darkMode ? 'LIGHT' : 'DARK'}
 					</button>
+				</div>
+
+				<!-- Pinned Entities -->
+				{#if persistedFavorites.entities.length > 0}
+					<div class="settings-section">
+						<div class="settings-section-label">PINNED ENTITIES</div>
+						{#each persistedFavorites.entities as entity (entity.cik)}
+							<div class="settings-favorite-row">
+								<span class="settings-fav-name">{entity.name}</span>
+								<span class="settings-fav-cik">{entity.cik}</span>
+								<button class="settings-fav-add" onclick={() => quickAddEntity(entity)} title="Add to search">+</button>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
+				<!-- Saved Groups -->
+				{#if persistedFavorites.groups.length > 0}
+					<div class="settings-section">
+						<div class="settings-section-label">SAVED GROUPS</div>
+						{#each persistedFavorites.groups as group (group.id)}
+							<div class="settings-group-row">
+								<span class="group-color-dot" style="background: {group.color}"></span>
+								<span class="settings-group-name">{group.name}</span>
+								<button class="settings-fav-add" onclick={() => quickLoadGroup(group)} title="Load group">LOAD</button>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
+				<!-- Recent History -->
+				{#if (persistedFavorites.entityHistory ?? []).length > 0}
+					<div class="settings-section">
+						<div class="settings-section-label">RECENT</div>
+						{#each (persistedFavorites.entityHistory ?? []).slice(0, 20) as entity (entity.cik)}
+							<div class="settings-favorite-row">
+								<span class="settings-fav-name">{entity.name}</span>
+								<span class="settings-fav-cik">{entity.cik}</span>
+								<button class="settings-fav-add" onclick={() => quickAddEntity(entity)} title="Add to search">+</button>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
+				<!-- Clear all -->
+				<div class="settings-row mt-sm">
+					<span class="settings-label">Data</span>
+					<button class="settings-btn settings-danger" onclick={clearAllData}>CLEAR ALL</button>
 				</div>
 			</div>
 		</div>
@@ -873,12 +979,8 @@
 								<span class="hover-label">EDGAR</span>
 								<a class="hover-link" href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={entity.cik}&type=&dateb=&owner=include&count=40" target="_blank" rel="noopener noreferrer">View on SEC EDGAR</a>
 								{#if entityGroup}
-									<span class="hover-label">Group</span>
-									<span class="hover-value">
-										<input type="text" class="group-name-input" value={entityGroup.name}
-											onchange={(e) => renameGroup(entityGroup.id, e.currentTarget.value)} />
-										({entityGroup.entityCiks.length} members)
-									</span>
+									<span class="hover-label">Tag</span>
+									<span class="hover-value">{entityGroup.name}</span>
 								{/if}
 							</span>
 						</span>
@@ -906,7 +1008,8 @@
 								<input class="group-name-input"
 									bind:this={groupInputRef}
 									placeholder="Group tag..."
-									bind:value={groupTagInput} />
+									bind:value={groupTagInput}
+									onkeydown={(e) => { if (e.key === 'Enter') saveEntityGroup(); }} />
 								<button class="group-save-btn" onclick={saveEntityGroup}>TAG</button>
 							</div>
 						{/if}
@@ -976,7 +1079,53 @@
 
 	{#if searchActive || $extractedNames.some(n => n.pinned)}
 		<div class="results container">
-			<!-- Extracted names panel -->
+			<!-- Entity summary panel -->
+			{#if searchActive && selectedEntities.length > 0}
+				<div class="panel mt-lg">
+					<div class="panel-header">ENTITIES</div>
+					<div class="entity-summary-list">
+						{#each selectedEntities as entity (`${entity.cik}`)}
+							<div class="entity-summary-row">
+								<div class="entity-summary-left">
+									<div class="entity-summary-name">
+										<a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={entity.cik}&type=&dateb=&owner=include&count=40"
+											target="_blank" rel="noopener noreferrer"
+											class="entity-summary-link">{entity.name}</a>
+										<span class="text-xs text-muted">{entity.cik}</span>
+										{#if entity.tickers?.length}
+											<span class="text-xs text-muted">({entity.tickers.join(', ')})</span>
+										{/if}
+									</div>
+									{#if entity.earliestFiling}
+										<div class="entity-summary-meta text-xs text-muted">
+											{entity.earliestFiling} -- {entity.latestFiling}
+											{#if entity.sicCode} | SIC {entity.sicCode}{/if}
+											{#if entity.filingCount} | {entity.filingCount} filings{/if}
+										</div>
+									{/if}
+									{#if entity.formTypes?.length}
+										<div class="entity-summary-forms">
+											{#each entity.formTypes as form}
+												<span class="filing-badge">{form}</span>
+											{/each}
+										</div>
+									{/if}
+								</div>
+								<div class="entity-summary-right">
+									<button type="button"
+										class="pin-btn" class:pinned={entity.pinned}
+										onclick={() => toggleEntityPin(entity.cik, entity.name)}
+										title={entity.pinned ? 'Unpin entity' : 'Pin to persist across sessions'}>
+										<i class={entity.pinned ? 'fas fa-thumbtack' : 'fa-thin fa-thumbtack'}></i>
+									</button>
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+						<!-- Extracted names panel -->
 			{#if $extractedNames.length > 0}
 				<div class="panel mt-lg">
 					<div class="panel-header panel-header-flex">
@@ -2371,7 +2520,11 @@
 		/* Reduce large margins */
 		.mt-3x { margin-top: var(--spacing-xl); }
 
-		/* Results container */
+		/* Entity summary responsive */
+		.entity-summary-row { flex-direction: column; gap: var(--spacing-xs); }
+		.entity-summary-right { width: 100%; justify-content: flex-end; }
+
+				/* Results container */
 		.results { padding-top: var(--spacing-sm); }
 	}
 
@@ -2421,4 +2574,33 @@
 		}
 		.compact-info-popup { left: -0.5rem; width: calc(100vw - 2rem); }
 	}
+	/* Settings panel sections */
+	.settings-popup { min-width: 280px; max-height: 80vh; overflow-y: auto; }
+	.settings-section { margin-top: var(--spacing-sm); padding-top: var(--spacing-sm); border-top: 1px solid var(--color-border); }
+	.settings-section-label { font-size: 0.6rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-text-muted); margin-bottom: 0.35rem; }
+	.settings-favorite-row { display: flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0; font-size: 0.72rem; }
+	.settings-fav-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+	.settings-fav-cik { color: var(--color-text-muted); font-family: var(--font-mono); font-size: 0.65rem; }
+	.settings-fav-add { background: none !important; border: none !important; box-shadow: none !important; padding: 0.1rem 0.3rem !important; font-size: 0.7rem; color: var(--color-text-muted); cursor: pointer; font-family: var(--font-mono); text-transform: none !important; letter-spacing: 0 !important; }
+	.settings-fav-add:hover { color: var(--color-text); transform: none !important; box-shadow: none !important; }
+	.settings-group-row { display: flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0; font-size: 0.72rem; }
+	.settings-group-name { flex: 1; font-weight: 600; }
+	.settings-danger { color: var(--color-error) !important; border-color: var(--color-error) !important; }
+	.mt-sm { margin-top: var(--spacing-sm); }
+
+	/* Entity summary panel */
+	.entity-summary-list { padding: 0; }
+	.entity-summary-row {
+		display: flex; align-items: flex-start; justify-content: space-between;
+		padding: 0.5rem var(--spacing-md); border-bottom: 1px solid var(--color-border); gap: var(--spacing-sm);
+	}
+	.entity-summary-row:last-child { border-bottom: none; }
+	.entity-summary-left { flex: 1; min-width: 0; }
+	.entity-summary-name { display: flex; align-items: baseline; gap: var(--spacing-sm); flex-wrap: wrap; }
+	.entity-summary-link { font-weight: 600; font-size: 0.9rem; color: var(--color-text); text-decoration: none; }
+	.entity-summary-link:hover { text-decoration: underline; }
+	.entity-summary-meta { margin-top: 0.15rem; }
+	.entity-summary-forms { display: flex; gap: 0.25rem; flex-wrap: wrap; margin-top: 0.3rem; }
+	.entity-summary-right { display: flex; align-items: center; gap: var(--spacing-sm); flex-shrink: 0; }
+
 </style>
