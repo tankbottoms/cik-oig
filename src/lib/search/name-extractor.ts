@@ -61,6 +61,14 @@ const NON_NAME_WORDS = new Set([
   'approval', 'process', 'procedures', 'information', 'additional',
   'proposal', 'proposals', 'vote', 'voting', 'resolution',
   'advisory', 'ratification', 'selection', 'appointment',
+  // Legal terms
+  'lawsuit', 'complaint', 'plaintiff', 'defendant', 'litigation', 'settlement',
+  'verdict', 'motion', 'appeal', 'filing', 'judgment', 'injunction', 'subpoena', 'deposition',
+  // Geographic terms
+  'vegas', 'angeles', 'francisco', 'chicago', 'houston', 'dallas', 'miami',
+  'boston', 'seattle', 'denver', 'phoenix', 'metro', 'county', 'district', 'state',
+  // Document qualifiers
+  'amended', 'original', 'final', 'initial', 'proposed',
 ]);
 
 // Common name prefixes/suffixes to validate we have real names
@@ -77,6 +85,7 @@ const NAME_SUFFIXES = new Set([
 const NOUN_SUFFIXES = [
   'tion', 'sion', 'ment', 'ness', 'ance', 'ence', 'ology', 'ical',
   'ture', 'ures', 'ings', 'ments', 'tions', 'sions', 'ities', 'ates',
+  'um', 'ium', 'suit',
 ];
 
 function isLikelyName(word: string): boolean {

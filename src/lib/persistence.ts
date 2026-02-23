@@ -9,6 +9,7 @@ function getDefaults(): PersistedFavorites {
 		entities: [],
 		groups: [],
 		persons: [],
+		entityHistory: [],
 		settings: { darkMode: false, defaultSearchMode: 'entity' },
 	};
 }

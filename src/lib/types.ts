@@ -114,6 +114,7 @@ export interface PersistedFavorites {
   entities: SelectedEntity[];
   groups: EntityGroup[];
   persons: Array<{ firstName: string; lastName: string; middleName?: string; fullName: string }>;
+  entityHistory: SelectedEntity[];
   settings: {
     darkMode: boolean;
     defaultSearchMode: SearchMode;
