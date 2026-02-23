@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tick, onMount } from 'svelte';
+	import { tick, onMount, onDestroy } from 'svelte';
 	import { fuzzyMatch } from '$lib/search/fuzzy-match';
 	import { logLines, extractedNames, isSearching, addLog, clearLog } from '$lib/stores';
 	import type { HealthcareEntity, SelectedEntity, SECSubmission, ParsedName, ExtractedNameResult, OIGSearchResult, FilingRef, SearchMode, PersistedFavorites } from '$lib/types';
@@ -114,9 +114,13 @@
 	let groupPopupRef: HTMLDivElement | undefined = $state();
 	let groupBtnRef: HTMLButtonElement | undefined = $state();
 
-	// Auto-persist pinned entities
+	// Auto-persist pinned entities + close stale popups on entity change
 	$effect(() => {
 		savePinnedEntities(selectedEntities);
+		// Close color picker if the target entity was removed
+		if (colorPickerTarget && !selectedEntities.some(e => `${e.cik}_${e.name}` === colorPickerTarget)) {
+			colorPickerTarget = null;
+		}
 	});
 
 	// Auto-persist groups
@@ -134,8 +138,27 @@
 		saveSettings({ darkMode, defaultSearchMode: searchMode });
 	});
 
+	// Close popups on click-outside
+	function handleDocumentClick(e: MouseEvent) {
+		const target = e.target as HTMLElement;
+		// Close group popup if clicking outside it and its toggle button
+		if (groupPopupOpen && groupPopupRef && groupBtnRef &&
+			!groupPopupRef.contains(target) && !groupBtnRef.contains(target)) {
+			groupPopupOpen = false;
+		}
+		// Close color picker if clicking outside any color picker
+		if (colorPickerTarget && !target.closest('.color-picker-popup') && !target.closest('.entity-pin-btn')) {
+			colorPickerTarget = null;
+		}
+		// Close settings if clicking outside
+		if (settingsOpen && !target.closest('.settings-popup') && !target.closest('.settings-toggle')) {
+			settingsOpen = false;
+		}
+	}
+
 	// Pre-pin Robert B. Spertell on mount and check against OIG
 	onMount(async () => {
+		document.addEventListener('click', handleDocumentClick);
 		// Apply dark mode theme if persisted
 		if (darkMode) {
 			document.documentElement.setAttribute('data-theme', 'dark');
@@ -169,6 +192,12 @@
 		}
 	});
 
+	onDestroy(() => {
+		if (typeof document !== 'undefined') {
+			document.removeEventListener('click', handleDocumentClick);
+		}
+	});
+
 	function onInput() {
 		if (debounceTimer) clearTimeout(debounceTimer);
 		debounceTimer = setTimeout(async () => {
@@ -186,11 +215,13 @@
 	}
 
 	function selectEntity(entity: SelectedEntity) {
+		if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = undefined; }
 		if (!selectedEntities.some(e => e.cik === entity.cik && e.name === entity.name)) {
 			selectedEntities = [...selectedEntities, entity];
 		}
 		query = '';
 		dropdownVisible = false;
+		dropdownResults = [];
 		inputEl?.focus();
 	}
 
@@ -241,6 +272,7 @@
 
 	function handlePinPointerDown(entityKey: string) {
 		longPressTriggered = false;
+		if (longPressTimer) clearTimeout(longPressTimer);
 		longPressTimer = setTimeout(() => {
 			longPressTriggered = true;
 			colorPickerTarget = colorPickerTarget === entityKey ? null : entityKey;
@@ -996,12 +1028,13 @@
 					{/each}
 					{#if selectedEntities.length >= 1}
 						<button type="button" class="group-entities-btn"
+							bind:this={groupBtnRef}
 							onclick={() => groupPopupOpen = !groupPopupOpen}
 							title="Group entities">
 							<i class="fa-thin fa-layer-group"></i>
 						</button>
 						{#if groupPopupOpen}
-							<div class="group-popup">
+							<div class="group-popup" bind:this={groupPopupRef}>
 								{#if entityGroups.length > 0}
 									<div class="group-section-label">ADD TO EXISTING</div>
 									{#each entityGroups as group}
@@ -1627,10 +1660,10 @@
 		background: var(--color-bg);
 		border: 1px solid var(--color-border-dark);
 		box-shadow: 3px 3px 0px var(--color-shadow);
+		pointer-events: none;
 	}
 
-	.entity-badge-wrapper:hover .entity-hover-popup,
-	.entity-badge-wrapper:focus-within .entity-hover-popup {
+	.entity-badge-wrapper:hover .entity-hover-popup {
 		display: grid;
 		grid-template-columns: auto 1fr;
 		gap: 0.15rem 0.5rem;
@@ -1656,10 +1689,10 @@
 		background: var(--color-bg);
 		border: 1px solid var(--color-border-dark);
 		box-shadow: 3px 3px 0px var(--color-shadow);
+		pointer-events: none;
 	}
 
-	.name-hover-wrapper:hover .name-hover-popup,
-	.name-hover-wrapper:focus-within .name-hover-popup {
+	.name-hover-wrapper:hover .name-hover-popup {
 		display: grid;
 		grid-template-columns: auto 1fr;
 		gap: 0.15rem 0.5rem;
