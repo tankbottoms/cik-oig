@@ -69,7 +69,6 @@
 	}
 
 	// Load persisted favorites on init
-	const favorites = loadFavorites();
 	let persistedFavorites = $state(loadFavorites());
 
 	$effect(() => {
@@ -81,31 +80,31 @@
 	// State - MW Medical pre-loaded as default entity
 	let query = $state('');
 	let selectedEntities: SelectedEntity[] = $state(
-		favorites.entities.length > 0
-			? favorites.entities
+		(persistedFavorites?.entities?.length ?? 0) > 0
+			? persistedFavorites.entities
 			: [{ name: 'MW MEDICAL INC', cik: '0001059577' }]
 	);
 	let dropdownResults: SelectedEntity[] = $state([]);
 	let dropdownVisible = $state(false);
 	let highlightedIndex = $state(0);
-	let searchActive = $state(favorites.entities.length > 0);
+	let searchActive = $state((persistedFavorites?.entities?.length ?? 0) > 0);
 	let inputEl: HTMLInputElement | undefined = $state();
 	let loadingDropdown = $state(false);
 	let logExpanded = $state(false);
-	let darkMode = $state(favorites.settings.darkMode);
-	let searchMode: SearchMode = $state(favorites.settings.defaultSearchMode);
+	let darkMode = $state(persistedFavorites?.settings?.darkMode ?? false);
+	let searchMode: SearchMode = $state(persistedFavorites?.settings?.defaultSearchMode ?? 'entity');
 	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
 	// Person mode state
 	let selectedPersons: Array<{ firstName: string; lastName: string; middleName?: string; fullName: string }> = $state(
-		favorites.persons.length > 0
-			? favorites.persons
+		(persistedFavorites?.persons?.length ?? 0) > 0
+			? persistedFavorites.persons
 			: [{ firstName: 'Daniel', lastName: 'Jung', middleName: 'F.', fullName: 'Daniel F. Jung' }]
 	);
 
 	// Entity pin + color grouping
 	const PASTEL_COLORS = ['#FFB3BA', '#FFDFBA', '#FFFFBA', '#BAFFC9', '#BAE1FF', '#E8BAFF', '#FFB3E6', '#C4C4C4'];
-	let entityGroups: Array<{ id: string; name: string; color: string; entityCiks: string[]; createdAt: number }> = $state(favorites.groups);
+	let entityGroups: Array<{ id: string; name: string; color: string; entityCiks: string[]; createdAt: number }> = $state(persistedFavorites?.groups ?? []);
 	let colorPickerTarget: string | null = $state(null);
 	let longPressTimer: ReturnType<typeof setTimeout> | undefined;
 	let longPressTriggered = false;
@@ -287,8 +286,8 @@
 		isSearching.set(false);
 		// Keep pinned entities, clear unpinned
 		selectedEntities = selectedEntities.filter(e => e.pinned);
-		selectedPersons = favorites.persons.length > 0
-			? favorites.persons
+		selectedPersons = (persistedFavorites?.persons?.length ?? 0) > 0
+			? persistedFavorites.persons
 			: [{ firstName: 'Daniel', lastName: 'Jung', middleName: 'F.', fullName: 'Daniel F. Jung' }];
 		query = '';
 		clearLog();
