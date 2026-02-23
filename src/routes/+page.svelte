@@ -108,9 +108,12 @@
 	let entityGroups: Array<{ id: string; name: string; color: string; entityCiks: string[]; createdAt: number }> = $state(favorites.groups);
 	let colorPickerTarget: string | null = $state(null);
 	let longPressTimer: ReturnType<typeof setTimeout> | undefined;
+	let longPressTriggered = false;
 	let groupTagInput = $state('');
 	let groupPopupOpen = $state(false);
 	let groupInputRef: HTMLInputElement | undefined = $state();
+	let groupPopupRef: HTMLDivElement | undefined = $state();
+	let groupBtnRef: HTMLButtonElement | undefined = $state();
 
 	// Auto-persist pinned entities
 	$effect(() => {
@@ -213,6 +216,7 @@
 	}
 
 	function toggleEntityPin(cik: string, name: string) {
+		if (longPressTriggered) { longPressTriggered = false; return; }
 		selectedEntities = selectedEntities.map(e =>
 			e.cik === cik && e.name === name ? { ...e, pinned: !e.pinned } : e
 		);
@@ -237,7 +241,9 @@
 	}
 
 	function handlePinPointerDown(entityKey: string) {
+		longPressTriggered = false;
 		longPressTimer = setTimeout(() => {
+			longPressTriggered = true;
 			colorPickerTarget = colorPickerTarget === entityKey ? null : entityKey;
 		}, 500);
 	}
@@ -288,6 +294,10 @@
 		clearLog();
 		colorPickerTarget = null;
 		groupPopupOpen = false;
+		// Clear non-pinned extracted names and reset match state
+		extractedNames.update(names => names.filter(n => n.pinned));
+		dismissedMatches = new Set();
+		collapsedMatches = new Set();
 		if ($extractedNames.filter(n => n.pinned).length === 0 && selectedEntities.length === 0) {
 			searchActive = false;
 		}
