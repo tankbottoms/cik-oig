@@ -1,79 +1,86 @@
 import type { SelectedEntity, EntityGroup, PersistedFavorites, SearchMode } from './types';
 
 const STORAGE_KEY = 'cik-oig-favorites';
+const CURRENT_VERSION = 1;
 
-type PersonEntry = { firstName: string; lastName: string; middleName?: string; fullName: string };
-
-const DEFAULTS: PersistedFavorites = {
-	version: 1,
-	entities: [{ name: 'MW MEDICAL INC', cik: '0001059577' }],
-	groups: [],
-	persons: [{ firstName: 'Daniel', lastName: 'Jung', middleName: 'F.', fullName: 'Daniel F. Jung' }],
-	settings: { darkMode: false, defaultSearchMode: 'entity' },
-};
+function getDefaults(): PersistedFavorites {
+	return {
+		version: CURRENT_VERSION,
+		entities: [],
+		groups: [],
+		persons: [],
+		settings: { darkMode: false, defaultSearchMode: 'entity' },
+	};
+}
 
 export function loadFavorites(): PersistedFavorites {
-	if (typeof globalThis.localStorage === 'undefined') {
-		return { ...DEFAULTS, entities: [...DEFAULTS.entities], groups: [], persons: [...DEFAULTS.persons], settings: { ...DEFAULTS.settings } };
-	}
 	try {
-		const raw = localStorage.getItem(STORAGE_KEY);
-		if (!raw) return { ...DEFAULTS, entities: [...DEFAULTS.entities], groups: [], persons: [...DEFAULTS.persons], settings: { ...DEFAULTS.settings } };
-		const parsed = JSON.parse(raw) as PersistedFavorites;
-		if (parsed.version !== 1) return { ...DEFAULTS, entities: [...DEFAULTS.entities], groups: [], persons: [...DEFAULTS.persons], settings: { ...DEFAULTS.settings } };
-		// Migrate legacy 'person' search mode to 'individual'
-		const settings = { ...DEFAULTS.settings, ...parsed.settings };
-		if ((settings.defaultSearchMode as string) === 'person') {
-			settings.defaultSearchMode = 'individual';
+		if (typeof window === 'undefined') return getDefaults();
+		const stored = localStorage.getItem(STORAGE_KEY);
+		if (!stored) return getDefaults();
+		const parsed = JSON.parse(stored) as PersistedFavorites;
+		// Version migration can go here in future
+		return parsed;
+	} catch {
+		return getDefaults();
+	}
+}
+
+export function saveFavorites(data: PersistedFavorites): void {
+	try {
+		if (typeof window === 'undefined') return;
+		localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+	} catch {
+		// Silently fail on quota exceeded or disabled storage
+	}
+}
+
+export function savePinnedEntities(entities: SelectedEntity[]): void {
+	const fav = loadFavorites();
+	fav.entities = entities.filter(e => e.pinned);
+	saveFavorites(fav);
+}
+
+export function saveGroups(groups: EntityGroup[]): void {
+	const fav = loadFavorites();
+	fav.groups = groups;
+	saveFavorites(fav);
+}
+
+export function savePinnedPersons(persons: Array<{ firstName: string; lastName: string; middleName?: string; fullName: string }>): void {
+	const fav = loadFavorites();
+	fav.persons = persons;
+	saveFavorites(fav);
+}
+
+export function saveSettings(settings: PersistedFavorites['settings']): void {
+	const fav = loadFavorites();
+	fav.settings = settings;
+	saveFavorites(fav);
+}
+
+export function loadPinnedEntities(): SelectedEntity[] {
+	return loadFavorites().entities;
+}
+
+export function loadGroups(): EntityGroup[] {
+	return loadFavorites().groups;
+}
+
+export function loadPinnedPersons(): Array<{ firstName: string; lastName: string; middleName?: string; fullName: string }> {
+	return loadFavorites().persons;
+}
+
+export function loadSettings(): PersistedFavorites['settings'] {
+	return loadFavorites().settings;
+}
+
+export function clearAllPersisted(): void {
+	try {
+		if (typeof window !== 'undefined') {
+			localStorage.removeItem(STORAGE_KEY);
 		}
-		return {
-			version: 1,
-			entities: parsed.entities || [...DEFAULTS.entities],
-			groups: parsed.groups || [],
-			persons: parsed.persons || [...DEFAULTS.persons],
-			settings,
-		};
 	} catch {
-		return { ...DEFAULTS, entities: [...DEFAULTS.entities], groups: [], persons: [...DEFAULTS.persons], settings: { ...DEFAULTS.settings } };
-	}
-}
-
-function save(data: Partial<PersistedFavorites>) {
-	try {
-		const existing = loadFavorites();
-		const merged: PersistedFavorites = {
-			version: 1,
-			entities: data.entities ?? existing.entities,
-			groups: data.groups ?? existing.groups,
-			persons: data.persons ?? existing.persons,
-			settings: data.settings ?? existing.settings,
-		};
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-	} catch {
-		// localStorage full or unavailable
-	}
-}
-
-export function savePinnedEntities(entities: SelectedEntity[]) {
-	save({ entities: entities.filter(e => e.pinned) });
-}
-
-export function saveGroups(groups: EntityGroup[]) {
-	save({ groups });
-}
-
-export function savePinnedPersons(persons: PersonEntry[]) {
-	save({ persons });
-}
-
-export function saveSettings(darkMode: boolean, defaultSearchMode: SearchMode) {
-	save({ settings: { darkMode, defaultSearchMode } });
-}
-
-export function clearAllData() {
-	try {
-		localStorage.removeItem(STORAGE_KEY);
-	} catch {
-		// ignore
+		// Silently fail
 	}
 }

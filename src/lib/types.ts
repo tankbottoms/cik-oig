@@ -3,8 +3,6 @@ export interface HealthcareEntity {
   c: string; // CIK (10-digit padded)
 }
 
-export type SearchMode = 'entity' | 'individual';
-
 export interface SelectedEntity {
   name: string;
   cik: string;
@@ -24,19 +22,8 @@ export interface EntityGroup {
   name: string;
   color: string;
   entityCiks: string[];
-  entityNames?: Record<string, string>; // cik -> name map for display
+  entityNames?: Record<string, string>;
   createdAt: number;
-}
-
-export interface PersistedFavorites {
-  version: 1;
-  entities: SelectedEntity[];
-  groups: EntityGroup[];
-  persons: Array<{ firstName: string; lastName: string; middleName?: string; fullName: string }>;
-  settings: {
-    darkMode: boolean;
-    defaultSearchMode: SearchMode;
-  };
 }
 
 export interface SECSubmission {
@@ -118,4 +105,17 @@ export interface LogLine {
   text: string;
   type: 'info' | 'fetch' | 'found' | 'match' | 'clear' | 'error';
   url?: string;
+}
+
+export type SearchMode = 'entity' | 'person' | 'individual';
+
+export interface PersistedFavorites {
+  version: 1;
+  entities: SelectedEntity[];
+  groups: EntityGroup[];
+  persons: Array<{ firstName: string; lastName: string; middleName?: string; fullName: string }>;
+  settings: {
+    darkMode: boolean;
+    defaultSearchMode: SearchMode;
+  };
 }
