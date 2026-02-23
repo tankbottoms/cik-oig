@@ -235,7 +235,9 @@
 	function selectEntity(entity: SelectedEntity) {
 		if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = undefined; }
 		if (!selectedEntities.some(e => e.cik === entity.cik && e.name === entity.name)) {
+			console.log(`[ENTITY] Adding entity #${selectedEntities.length + 1}: ${entity.name}`);
 			selectedEntities = [...selectedEntities, entity];
+			console.log(`[ENTITY] Total entities now: ${selectedEntities.length}`);
 		}
 		query = '';
 		dropdownVisible = false;
@@ -1188,7 +1190,7 @@
 				<div class="panel mt-lg">
 					<div class="panel-header">ENTITIES</div>
 					<div class="entity-summary-list">
-						{#each selectedEntities as entity (`${entity.cik}`)}
+						{#each selectedEntities as entity (`${entity.cik}_${entity.name}`)}
 							<div class="entity-summary-row">
 								<div class="entity-summary-left">
 									<div class="entity-summary-name">
