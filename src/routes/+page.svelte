@@ -862,9 +862,26 @@
 				groups: [],
 				persons: [],
 				entityHistory: [],
-				settings: persistedFavorites.settings,
+				settings: persistedFavorites?.settings ?? { darkMode: false, defaultSearchMode: 'entity' },
 			});
 			persistedFavorites = loadFavorites();
+		}
+	}
+
+	function clearLocalStorage() {
+		if (confirm('This will clear ALL localStorage data (entities, groups, history, settings). Are you sure?')) {
+			try {
+				localStorage.clear();
+				persistedFavorites = loadFavorites();
+				selectedEntities = [];
+				selectedPersons = [{ firstName: 'Daniel', lastName: 'Jung', middleName: 'F.', fullName: 'Daniel F. Jung' }];
+				entityGroups = [];
+				searchActive = false;
+				settingsOpen = false;
+				alert('Cache cleared. Page will reset.');
+			} catch (e) {
+				alert('Failed to clear cache: ' + String(e));
+			}
 		}
 	}
 </script>
@@ -939,6 +956,12 @@
 				<div class="settings-row mt-sm">
 					<span class="settings-label">Data</span>
 					<button class="settings-btn settings-danger" onclick={clearAllData}>CLEAR ALL</button>
+				</div>
+
+				<!-- Clear localStorage -->
+				<div class="settings-row">
+					<span class="settings-label">Cache</span>
+					<button class="settings-btn settings-danger" onclick={clearLocalStorage}>CLEAR CACHE</button>
 				</div>
 			</div>
 		</div>
