@@ -745,49 +745,59 @@
 
 	// C4: Entity grouping glyph - add to existing group
 	function addEntitiesToGroup(groupId: string) {
-		const group = entityGroups.find(g => g.id === groupId);
-		if (!group) return;
+		try {
+			const group = entityGroups.find(g => g.id === groupId);
+			if (!group) return;
 
-		// Assign group's color to all currently uncolored selected entities
-		selectedEntities = selectedEntities.map(e => {
-			if (!e.color && !group.entityCiks.includes(e.cik)) {
-				return { ...e, color: group.color };
-			}
-			return e;
-		});
-		rebuildGroups();
-		groupPopupOpen = false;
+			// Assign group's color to all currently uncolored selected entities
+			selectedEntities = selectedEntities.map(e => {
+				if (!e.color && !group.entityCiks.includes(e.cik)) {
+					return { ...e, color: group.color };
+				}
+				return e;
+			});
+			rebuildGroups();
+			groupPopupOpen = false;
+		} catch (e) {
+			console.error('Error adding entities to group:', e);
+			alert('Error grouping entities. Click SETTINGS → CLEAR CACHE to reset.');
+		}
 	}
 
 	// Create new group
 	function saveEntityGroup() {
-		if (!groupTagInput.trim()) return;
-		const tagName = groupTagInput.trim();
-		// Pick a color not already in use
-		const usedColors = new Set(entityGroups.map(g => g.color));
-		const available = PASTEL_COLORS.filter(c => !usedColors.has(c));
-		const color = available.length > 0
-			? available[Math.floor(Math.random() * available.length)]
-			: PASTEL_COLORS[Math.floor(Math.random() * PASTEL_COLORS.length)];
+		try {
+			if (!groupTagInput.trim()) return;
+			const tagName = groupTagInput.trim();
+			// Pick a color not already in use
+			const usedColors = new Set(entityGroups.map(g => g.color));
+			const available = PASTEL_COLORS.filter(c => !usedColors.has(c));
+			const color = available.length > 0
+				? available[Math.floor(Math.random() * available.length)]
+				: PASTEL_COLORS[Math.floor(Math.random() * PASTEL_COLORS.length)];
 
-		// Assign color to all uncolored entities
-		selectedEntities = selectedEntities.map(e => e.color ? e : { ...e, color });
+			// Assign color to all uncolored entities
+			selectedEntities = selectedEntities.map(e => e.color ? e : { ...e, color });
 
-		// Build group directly
-		const newGroup = {
-			id: crypto.randomUUID(),
-			name: tagName,
-			color,
-			entityCiks: selectedEntities.filter(e => e.color === color).map(e => e.cik),
-			createdAt: Date.now(),
-		};
+			// Build group directly
+			const newGroup = {
+				id: crypto.randomUUID(),
+				name: tagName,
+				color,
+				entityCiks: selectedEntities.filter(e => e.color === color).map(e => e.cik),
+				createdAt: Date.now(),
+			};
 
-		// Merge with existing groups (rebuild from entity colors, then override name for this color)
-		rebuildGroups();
-		entityGroups = entityGroups.map(g => g.color === color ? { ...g, name: tagName, id: newGroup.id } : g);
+			// Merge with existing groups (rebuild from entity colors, then override name for this color)
+			rebuildGroups();
+			entityGroups = entityGroups.map(g => g.color === color ? { ...g, name: tagName, id: newGroup.id } : g);
 
-		groupTagInput = '';
-		groupPopupOpen = false;
+			groupTagInput = '';
+			groupPopupOpen = false;
+		} catch (e) {
+			console.error('Error saving entity group:', e);
+			alert('Error creating group. Click SETTINGS → CLEAR CACHE to reset.');
+		}
 	}
 
 	// Focus group input when popup opens
