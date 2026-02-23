@@ -965,6 +965,16 @@
 			console.log(`[SETTINGS] Clicked, current state: ${settingsOpen}, searchActive: ${searchActive}`);
 			settingsOpen = !settingsOpen;
 			console.log(`[SETTINGS] New state: ${settingsOpen}`);
+			// Reload favorites data immediately when opening settings
+			if (settingsOpen) {
+				try {
+					console.log(`[SETTINGS] Reloading favorites from button click`);
+					persistedFavorites = loadFavorites();
+					console.log(`[SETTINGS] Loaded: ${persistedFavorites?.entities?.length || 0} entities`);
+				} catch (e) {
+					console.error(`[SETTINGS] Error loading in button click:`, e);
+				}
+			}
 		}} title="Settings">
 			<i class="fa-thin fa-gear"></i>
 		</button>
