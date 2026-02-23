@@ -71,9 +71,15 @@
 	// Load persisted favorites on init
 	let persistedFavorites = $state(loadFavorites());
 
+	// Track settings state changes
+	let settingsOpenTracker = $derived(settingsOpen);
+	$effect.pre(() => {
+		console.log(`[SETTINGS-TRACKER] settingsOpen changed to: ${settingsOpenTracker}`);
+	});
+
 	$effect(() => {
 		try {
-			console.log(`[SETTINGS-EFFECT] Running, settingsOpen=${settingsOpen}`);
+			console.log(`[SETTINGS-EFFECT] Running with settingsOpen=${settingsOpen}`);
 			if (settingsOpen) {
 				try {
 					console.log(`[SETTINGS] Loading favorites for settings panel`);
