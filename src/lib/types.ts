@@ -8,6 +8,13 @@ export interface SelectedEntity {
   cik: string;
   pinned?: boolean;
   color?: string;
+  earliestFiling?: string;
+  latestFiling?: string;
+  formTypes?: string[];
+  filingCount?: number;
+  sicCode?: string;
+  sicDescription?: string;
+  tickers?: string[];
 }
 
 export interface EntityGroup {
@@ -15,6 +22,7 @@ export interface EntityGroup {
   name: string;
   color: string;
   entityCiks: string[];
+  entityNames?: Record<string, string>;
   createdAt: number;
 }
 
@@ -97,4 +105,17 @@ export interface LogLine {
   text: string;
   type: 'info' | 'fetch' | 'found' | 'match' | 'clear' | 'error';
   url?: string;
+}
+
+export type SearchMode = 'entity' | 'person' | 'individual';
+
+export interface PersistedFavorites {
+  version: 1;
+  entities: SelectedEntity[];
+  groups: EntityGroup[];
+  persons: Array<{ firstName: string; lastName: string; middleName?: string; fullName: string }>;
+  settings: {
+    darkMode: boolean;
+    defaultSearchMode: SearchMode;
+  };
 }

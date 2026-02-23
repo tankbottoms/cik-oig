@@ -2,7 +2,8 @@
 	import { tick, onMount } from 'svelte';
 	import { fuzzyMatch } from '$lib/search/fuzzy-match';
 	import { logLines, extractedNames, isSearching, addLog, clearLog } from '$lib/stores';
-	import type { HealthcareEntity, SelectedEntity, SECSubmission, ParsedName, ExtractedNameResult, OIGSearchResult, FilingRef } from '$lib/types';
+	import type { HealthcareEntity, SelectedEntity, SECSubmission, ParsedName, ExtractedNameResult, OIGSearchResult, FilingRef, SearchMode, PersistedFavorites } from '$lib/types';
+	import { loadFavorites, savePinnedEntities, saveGroups, savePinnedPersons, saveSettings, clearAllPersisted, saveFavorites } from '$lib/persistence';
 
 	// Auto-scroll terminal log
 	$effect(() => {
@@ -67,35 +68,69 @@
 		return allResults.sort((a, b) => b.score - a.score).slice(0, limit).map(({ name, cik }) => ({ name, cik }));
 	}
 
+	// Load persisted favorites on init
+	const favorites = loadFavorites();
+
 	// State - MW Medical pre-loaded as default entity
 	let query = $state('');
-	let selectedEntities: SelectedEntity[] = $state([
-		{ name: 'MW MEDICAL INC', cik: '0001059577' }
-	]);
+	let selectedEntities: SelectedEntity[] = $state(
+		favorites.entities.length > 0
+			? favorites.entities
+			: [{ name: 'MW MEDICAL INC', cik: '0001059577' }]
+	);
 	let dropdownResults: SelectedEntity[] = $state([]);
 	let dropdownVisible = $state(false);
 	let highlightedIndex = $state(0);
-	let searchActive = $state(false);
+	let searchActive = $state(favorites.entities.length > 0);
 	let inputEl: HTMLInputElement | undefined = $state();
 	let loadingDropdown = $state(false);
 	let logExpanded = $state(false);
-	let darkMode = $state(false);
-	let searchMode: 'entity' | 'person' = $state('entity');
+	let darkMode = $state(favorites.settings.darkMode);
+	let searchMode: SearchMode = $state(favorites.settings.defaultSearchMode);
 	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
 	// Person mode state
-	let selectedPersons: Array<{ firstName: string; lastName: string; middleName?: string; fullName: string }> = $state([
-		{ firstName: 'Daniel', lastName: 'Jung', middleName: 'F.', fullName: 'Daniel F. Jung' }
-	]);
+	let selectedPersons: Array<{ firstName: string; lastName: string; middleName?: string; fullName: string }> = $state(
+		favorites.persons.length > 0
+			? favorites.persons
+			: [{ firstName: 'Daniel', lastName: 'Jung', middleName: 'F.', fullName: 'Daniel F. Jung' }]
+	);
 
 	// Entity pin + color grouping
 	const PASTEL_COLORS = ['#FFB3BA', '#FFDFBA', '#FFFFBA', '#BAFFC9', '#BAE1FF', '#E8BAFF', '#FFB3E6', '#C4C4C4'];
-	let entityGroups: Array<{ id: string; name: string; color: string; entityCiks: string[]; createdAt: number }> = $state([]);
+	let entityGroups: Array<{ id: string; name: string; color: string; entityCiks: string[]; createdAt: number }> = $state(favorites.groups);
 	let colorPickerTarget: string | null = $state(null);
 	let longPressTimer: ReturnType<typeof setTimeout> | undefined;
+	let groupTagInput = $state('');
+	let groupPopupOpen = $state(false);
+	let groupInputRef: HTMLInputElement | undefined = $state();
+
+	// Auto-persist pinned entities
+	$effect(() => {
+		savePinnedEntities(selectedEntities);
+	});
+
+	// Auto-persist groups
+	$effect(() => {
+		saveGroups(entityGroups);
+	});
+
+	// Auto-persist persons
+	$effect(() => {
+		savePinnedPersons(selectedPersons);
+	});
+
+	// Auto-persist settings
+	$effect(() => {
+		saveSettings({ darkMode, defaultSearchMode: searchMode });
+	});
 
 	// Pre-pin Robert B. Spertell on mount and check against OIG
 	onMount(async () => {
+		// Apply dark mode theme if persisted
+		if (darkMode) {
+			document.documentElement.setAttribute('data-theme', 'dark');
+		}
 		const alreadyExists = $extractedNames.some(n => n.name.lastName.toLowerCase() === 'spertell');
 		if (!alreadyExists) {
 			extractedNames.update(names => [...names, {
@@ -177,9 +212,19 @@
 	}
 
 	function setEntityColor(cik: string, name: string, color: string) {
-		selectedEntities = selectedEntities.map(e =>
-			e.cik === cik && e.name === name ? { ...e, color: color || undefined } : e
-		);
+		// Find which group this entity belongs to (if any)
+		const entity = selectedEntities.find(e => e.cik === cik && e.name === name);
+		const oldColor = entity?.color;
+
+		// Update all entities that share the old color (grouped entities) with new color
+		selectedEntities = selectedEntities.map(e => {
+			if (oldColor && e.color === oldColor) {
+				return { ...e, color: color || undefined };
+			} else if (e.cik === cik && e.name === name) {
+				return { ...e, color: color || undefined };
+			}
+			return e;
+		});
 		colorPickerTarget = null;
 		rebuildGroups();
 	}
@@ -227,12 +272,16 @@
 	function clearSearch() {
 		// Always allow clearing, even mid-search
 		isSearching.set(false);
-		selectedEntities = [];
-		selectedPersons = [{ firstName: 'Daniel', lastName: 'Jung', middleName: 'F.', fullName: 'Daniel F. Jung' }];
+		// Keep pinned entities, clear unpinned
+		selectedEntities = selectedEntities.filter(e => e.pinned);
+		selectedPersons = favorites.persons.length > 0
+			? favorites.persons
+			: [{ firstName: 'Daniel', lastName: 'Jung', middleName: 'F.', fullName: 'Daniel F. Jung' }];
 		query = '';
 		clearLog();
 		colorPickerTarget = null;
-		if ($extractedNames.filter(n => n.pinned).length === 0) {
+		groupPopupOpen = false;
+		if ($extractedNames.filter(n => n.pinned).length === 0 && selectedEntities.length === 0) {
 			searchActive = false;
 		}
 		inputEl?.focus();
@@ -628,10 +677,23 @@
 	// C2: Settings
 	let settingsOpen = $state(false);
 
-	// C4: Entity grouping glyph
-	let groupPopupOpen = $state(false);
-	let groupTagInput = $state('');
+	// C4: Entity grouping glyph - add to existing group
+	function addEntitiesToGroup(groupId: string) {
+		const group = entityGroups.find(g => g.id === groupId);
+		if (!group) return;
 
+		// Assign group's color to all currently uncolored selected entities
+		selectedEntities = selectedEntities.map(e => {
+			if (!e.color && !group.entityCiks.includes(e.cik)) {
+				return { ...e, color: group.color };
+			}
+			return e;
+		});
+		rebuildGroups();
+		groupPopupOpen = false;
+	}
+
+	// Create new group
 	function saveEntityGroup() {
 		if (!groupTagInput.trim()) return;
 		// Assign a random pastel color to all uncolored selected entities
@@ -646,6 +708,13 @@
 		groupTagInput = '';
 		groupPopupOpen = false;
 	}
+
+	// Focus group input when popup opens
+	$effect(() => {
+		if (groupPopupOpen) {
+			setTimeout(() => groupInputRef?.focus(), 0);
+		}
+	});
 
 	// C6: OIG collapse/dismiss
 	let dismissedMatches: Set<string> = $state(new Set());
@@ -667,6 +736,38 @@
 	let clearCount = $derived($extractedNames.filter(n => n.oigStatus === 'clear').length);
 	let matchCount = $derived($extractedNames.filter(n => n.oigStatus === 'match').length);
 	let possibleCount = $derived($extractedNames.filter(n => n.oigStatus === 'possible_match').length);
+
+	// Settings panel helpers
+	function quickAddEntity(entity: SelectedEntity) {
+		if (!selectedEntities.some(e => e.cik === entity.cik)) {
+			selectedEntities = [...selectedEntities, entity];
+		}
+		if (!searchActive) searchActive = true;
+	}
+
+	function quickLoadGroup(group: any) {
+		const savedEntities = favorites.entities.filter(e => group.entityCiks.includes(e.cik));
+		for (const entity of savedEntities) {
+			if (!selectedEntities.some(e => e.cik === entity.cik)) {
+				selectedEntities = [...selectedEntities, { ...entity, color: group.color }];
+			}
+		}
+		rebuildGroups();
+		if (!searchActive) searchActive = true;
+	}
+
+	function removeFavoriteEntity(cik: string) {
+		const fav = loadFavorites();
+		fav.entities = fav.entities.filter(e => e.cik !== cik);
+		saveFavorites(fav);
+	}
+
+	function clearAllData() {
+		if (confirm('Clear all persisted data? This cannot be undone.')) {
+			clearAllPersisted();
+			window.location.reload();
+		}
+	}
 </script>
 
 <div class="app" class:search-active={searchActive}>
@@ -782,7 +883,7 @@
 							</span>
 						</span>
 					{/each}
-					{#if selectedEntities.length >= 3}
+					{#if selectedEntities.length >= 1}
 						<button type="button" class="group-entities-btn"
 							onclick={() => groupPopupOpen = !groupPopupOpen}
 							title="Group entities">
@@ -790,22 +891,28 @@
 						</button>
 						{#if groupPopupOpen}
 							<div class="group-popup">
-								<input class="group-name-input" placeholder="Group tag..." bind:value={groupTagInput} />
-								<button class="group-save-btn" onclick={saveEntityGroup}>TAG</button>
 								{#if entityGroups.length > 0}
-									<div class="group-list">
-										{#each entityGroups as group}
-											<div class="group-item">
-												<span class="group-color-dot" style="background: {group.color}"></span>
-												<span>{group.name} ({group.entityCiks.length})</span>
-											</div>
-										{/each}
-									</div>
+									<div class="group-section-label">ADD TO EXISTING</div>
+									{#each entityGroups as group}
+										<button type="button" class="group-item-clickable"
+											onclick={() => addEntitiesToGroup(group.id)}>
+											<span class="group-color-dot" style="background: {group.color}"></span>
+											<span>{group.name} ({group.entityCiks.length})</span>
+										</button>
+									{/each}
+									<div class="group-divider"></div>
 								{/if}
+								<div class="group-section-label">CREATE NEW</div>
+								<input class="group-name-input"
+									bind:this={groupInputRef}
+									placeholder="Group tag..."
+									bind:value={groupTagInput} />
+								<button class="group-save-btn" onclick={saveEntityGroup}>TAG</button>
 							</div>
 						{/if}
 					{/if}
-				{:else}
+				{/if}
+				{#if searchMode === 'person' || searchMode === 'individual'}
 					{#each selectedPersons as person (person.fullName)}
 						<span class="person-badge">
 							{person.fullName}
