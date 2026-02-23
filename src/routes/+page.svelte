@@ -838,7 +838,7 @@
 	}
 
 	function quickLoadGroup(group: any) {
-		const savedEntities = persistedFavorites.entities.filter(e => group.entityCiks.includes(e.cik));
+		const savedEntities = (persistedFavorites?.entities ?? []).filter(e => group.entityCiks.includes(e.cik));
 		for (const entity of savedEntities) {
 			if (!selectedEntities.some(e => e.cik === entity.cik)) {
 				selectedEntities = [...selectedEntities, { ...entity, color: group.color }];
