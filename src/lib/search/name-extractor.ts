@@ -14,6 +14,17 @@ const NON_NAME_WORDS = new Set([
   'can', 'our', 'his', 'her', 'its', 'who', 'how', 'all', 'any', 'each',
   'both', 'such', 'than', 'also', 'when', 'then', 'very', 'must', 'just',
   'only', 'made', 'make', 'per', 'pro', 'did', 'does', 'done',
+  'by', 'to', 'at', 'on', 'in', 'or', 'if', 'so', 'no', 'as', 'of', 'up',
+  'an', 'be', 'do', 'he', 'it', 'my', 'we', 'us',
+  'none', 'null', 'true', 'false', 'unknown', 'other', 'new', 'old',
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december',
+  'months', 'ended', 'beginning', 'ending', 'fiscal', 'quarterly',
+  'technology', 'agreement', 'explorer', 'aurora', 'legal', 'world',
+  'dynamic', 'medical', 'health', 'care', 'services', 'systems',
+  'solutions', 'industries', 'enterprises', 'associates', 'resources',
+  'management', 'development', 'communications', 'properties', 'investments',
+  'strategic', 'national', 'federal', 'regional', 'professional',
   'chief', 'officer', 'director', 'president', 'secretary', 'treasurer',
   'chairman', 'chairwoman', 'executive', 'senior', 'vice', 'general',
   'assistant', 'associate', 'managing', 'principal', 'acting', 'interim',
@@ -62,6 +73,12 @@ const NAME_SUFFIXES = new Set([
   'dds', 'dvm', 'rn', 'do', 'dpm', 'od', 'np', 'pa',
 ]);
 
+// Suffixes that indicate common nouns, not names
+const NOUN_SUFFIXES = [
+  'tion', 'sion', 'ment', 'ness', 'ance', 'ence', 'ology', 'ical',
+  'ture', 'ures', 'ings', 'ments', 'tions', 'sions', 'ities', 'ates',
+];
+
 function isLikelyName(word: string): boolean {
   const lower = word.toLowerCase().replace(/[.,;:]/g, '');
   if (lower.length < 2) return false;
@@ -72,6 +89,8 @@ function isLikelyName(word: string): boolean {
   if (word.length > 3 && word === word.toUpperCase()) return false;
   // Should not contain digits
   if (/\d/.test(word)) return false;
+  // Reject words with common noun suffixes (Technology, Agreement, etc.)
+  if (lower.length > 5 && NOUN_SUFFIXES.some(s => lower.endsWith(s))) return false;
   return true;
 }
 
@@ -163,6 +182,14 @@ export function extractNamesFromText(html: string, source: string): ParsedName[]
     if (parsed.firstName.length > 25 || parsed.lastName.length > 30) return;
     if (parsed.firstName.length < 2 || parsed.lastName.length < 2) return;
 
+    // Reject names where first and last are identical (parsing artifact)
+    if (parsed.firstName.toLowerCase() === parsed.lastName.toLowerCase()) return;
+
+    // Reject names with duplicate words (e.g. "Joseph Spellman Joseph")
+    const nameParts = parsed.fullName.toLowerCase().split(/\s+/).filter(p => p.length > 1);
+    const uniqueParts = new Set(nameParts);
+    if (uniqueParts.size < nameParts.length) return;
+
     seen.add(key);
     names.push(parsed);
   }
@@ -184,7 +211,8 @@ export function extractNamesFromText(html: string, source: string): ParsedName[]
   // Pattern 3: Name, Title pattern (comma-separated on same line context)
   // "Albert Bourla, Chief Executive Officer"
   // "David M. Denton, Chief Financial Officer"
-  const nameTitlePattern = /([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)*\s+(?:[A-Z][a-z]+\s+)?[A-Z][a-z]+)\s*,\s*(?:Chief|President|Vice|Executive|Senior|Director|Chairman|Chairwoman|Secretary|Treasurer|General\s+Counsel|Controller)/g;
+  // Strict: only middle initials with periods to prevent cross-boundary captures
+  const nameTitlePattern = /([A-Z][a-z]+(?:\s+[A-Z]\.)*\s+[A-Z][a-z]+)\s*,\s*(?:Chief|President|Vice|Executive|Senior|Director|Chairman|Chairwoman|Secretary|Treasurer|General\s+Counsel|Controller)/g;
   while ((match = nameTitlePattern.exec(text)) !== null) {
     addName(parseFullName(match[1], source));
   }
@@ -209,31 +237,31 @@ export function extractNamesFromText(html: string, source: string): ParsedName[]
 
   // Pattern 6: DEF 14A director/nominee lists - "Name Age Director Since"
   // These are structured as: "FirstName LastName digits digits"
-  const directorPattern = /([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)*\s+(?:[A-Z][a-z]+\s+)?[A-Z][a-z]+)\s+\d{2,3}\s+\d{4}/g;
+  const directorPattern = /([A-Z][a-z]+(?:\s+[A-Z]\.)*\s+[A-Z][a-z]+)\s+\d{2,3}\s+\d{4}/g;
   while ((match = directorPattern.exec(text)) !== null) {
     addName(parseFullName(match[1], source));
   }
 
   // Pattern 7: "Name has served as" / "Name was appointed" / "Name joined"
-  const narrativePattern = /([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)*\s+(?:[A-Z][a-z]+\s+)?[A-Z][a-z]+)\s+(?:has\s+served|was\s+appointed|joined|serves?\s+as|has\s+been|became|is\s+the|was\s+named|was\s+elected)/g;
+  const narrativePattern = /([A-Z][a-z]+(?:\s+[A-Z]\.)*\s+[A-Z][a-z]+)\s+(?:has\s+served|was\s+appointed|joined|serves?\s+as|has\s+been|became|is\s+the|was\s+named|was\s+elected)/g;
   while ((match = narrativePattern.exec(text)) !== null) {
     addName(parseFullName(match[1], source));
   }
 
   // Pattern 8: "Name resigned" / "Name departed" / "Name was terminated" / "Name stepped down"
-  const departurePattern = /([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)*\s+(?:[A-Z][a-z]+\s+)?[A-Z][a-z]+)\s*,?\s*(?:resigned|departed|was\s+terminated|stepped\s+down|was\s+removed|was\s+replaced|left\s+the|ceased|retired)/g;
+  const departurePattern = /([A-Z][a-z]+(?:\s+[A-Z]\.)*\s+[A-Z][a-z]+)\s*,?\s*(?:resigned|departed|was\s+terminated|stepped\s+down|was\s+removed|was\s+replaced|left\s+the|ceased|retired)/g;
   while ((match = departurePattern.exec(text)) !== null) {
     addName(parseFullName(match[1], source));
   }
 
   // Pattern 9: "Name, [role] of [Company]" / "Name, a director" / "Name, the former"
-  const rolePattern = /([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)*\s+(?:[A-Z][a-z]+\s+)?[A-Z][a-z]+)\s*,\s*(?:a\s+(?:director|member|partner|consultant|officer|former)|the\s+(?:former|current|then)|our\s+(?:former|current)|who\s+(?:served|was|is|has)|formerly)/g;
+  const rolePattern = /([A-Z][a-z]+(?:\s+[A-Z]\.)*\s+[A-Z][a-z]+)\s*,\s*(?:a\s+(?:director|member|partner|consultant|officer|former)|the\s+(?:former|current|then)|our\s+(?:former|current)|who\s+(?:served|was|is|has)|formerly)/g;
   while ((match = rolePattern.exec(text)) !== null) {
     addName(parseFullName(match[1], source));
   }
 
   // Pattern 10: "Name was [appointed/hired/retained] as"
-  const hiredPattern = /([A-Z][a-z]+(?:\s+[A-Z]\.?\s*)*\s+(?:[A-Z][a-z]+\s+)?[A-Z][a-z]+)\s+was\s+(?:appointed|hired|retained|engaged|named|elected|designated)\s+(?:as|to)/g;
+  const hiredPattern = /([A-Z][a-z]+(?:\s+[A-Z]\.)*\s+[A-Z][a-z]+)\s+was\s+(?:appointed|hired|retained|engaged|named|elected|designated)\s+(?:as|to)/g;
   while ((match = hiredPattern.exec(text)) !== null) {
     addName(parseFullName(match[1], source));
   }

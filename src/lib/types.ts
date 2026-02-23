@@ -3,11 +3,20 @@ export interface HealthcareEntity {
   c: string; // CIK (10-digit padded)
 }
 
+export type SearchMode = 'entity' | 'individual';
+
 export interface SelectedEntity {
   name: string;
   cik: string;
   pinned?: boolean;
   color?: string;
+  earliestFiling?: string;
+  latestFiling?: string;
+  formTypes?: string[];
+  filingCount?: number;
+  sicCode?: string;
+  sicDescription?: string;
+  tickers?: string[];
 }
 
 export interface EntityGroup {
@@ -15,7 +24,19 @@ export interface EntityGroup {
   name: string;
   color: string;
   entityCiks: string[];
+  entityNames?: Record<string, string>; // cik -> name map for display
   createdAt: number;
+}
+
+export interface PersistedFavorites {
+  version: 1;
+  entities: SelectedEntity[];
+  groups: EntityGroup[];
+  persons: Array<{ firstName: string; lastName: string; middleName?: string; fullName: string }>;
+  settings: {
+    darkMode: boolean;
+    defaultSearchMode: SearchMode;
+  };
 }
 
 export interface SECSubmission {
