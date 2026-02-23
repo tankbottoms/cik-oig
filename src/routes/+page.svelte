@@ -272,9 +272,11 @@
 
 	function toggleEntityPin(cik: string, name: string) {
 		if (longPressTriggered) { longPressTriggered = false; return; }
+		console.log(`[PIN] Toggling pin for ${name} (currently pinned: ${selectedEntities.find(e => e.cik === cik && e.name === name)?.pinned ?? false})`);
 		selectedEntities = selectedEntities.map(e =>
 			e.cik === cik && e.name === name ? { ...e, pinned: !e.pinned } : e
 		);
+		console.log(`[PIN] Pin toggled, pinned count: ${selectedEntities.filter(e => e.pinned).length}`);
 	}
 
 	function setEntityColor(cik: string, name: string, color: string) {
@@ -798,15 +800,17 @@
 
 			// Pick a color not already in use
 			const usedColors = new Set(entityGroups.map(g => g.color));
+			console.log(`[GROUP] Used colors: ${Array.from(usedColors).join(', ')}, PASTEL_COLORS length: ${PASTEL_COLORS.length}`);
 			const available = PASTEL_COLORS.filter(c => !usedColors.has(c));
 			const color = available.length > 0
 				? available[Math.floor(Math.random() * available.length)]
 				: PASTEL_COLORS[Math.floor(Math.random() * PASTEL_COLORS.length)];
-			console.log(`[GROUP] Assigned color: ${color}`);
+			console.log(`[GROUP] Assigned color: ${color}, available colors: ${available.length}`);
 
 			// Assign color to all uncolored entities
+			console.log(`[GROUP] Before color assignment: ${selectedEntities.filter(e => !e.color).length} uncolored entities`);
 			selectedEntities = selectedEntities.map(e => e.color ? e : { ...e, color });
-			console.log(`[GROUP] Colored entities: ${selectedEntities.length}`);
+			console.log(`[GROUP] After color assignment: ${selectedEntities.filter(e => e.color).length} colored entities`);
 
 			// Build group directly
 			const newGroup = {
@@ -819,14 +823,17 @@
 			console.log(`[GROUP] New group created: ${newGroup.name} with ${newGroup.entityCiks.length} entities`);
 
 			// Merge with existing groups (rebuild from entity colors, then override name for this color)
+			console.log(`[GROUP] Calling rebuildGroups() with ${selectedEntities.length} entities`);
 			rebuildGroups();
-			console.log(`[GROUP] Rebuilt groups: ${entityGroups.length}`);
+			console.log(`[GROUP] Rebuilt groups: ${entityGroups.length} groups`);
 
+			console.log(`[GROUP] Updating group names...`);
 			entityGroups = entityGroups.map(g => g.color === color ? { ...g, name: tagName, id: newGroup.id } : g);
-			console.log(`[GROUP] Updated group name, completed`);
+			console.log(`[GROUP] Updated group name, completed. Total groups: ${entityGroups.length}`);
 
 			groupTagInput = '';
 			groupPopupOpen = false;
+			console.log(`[GROUP] saveEntityGroup completed successfully`);
 		} catch (e) {
 			console.error('Error saving entity group:', e, e instanceof Error ? e.stack : '');
 		}
