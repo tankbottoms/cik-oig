@@ -116,22 +116,38 @@
 
 	// Auto-persist pinned entities
 	$effect(() => {
-		savePinnedEntities(selectedEntities);
+		try {
+			savePinnedEntities(selectedEntities);
+		} catch (e) {
+			console.error('Error persisting entities:', e);
+		}
 	});
 
 	// Auto-persist groups
 	$effect(() => {
-		saveGroups(entityGroups);
+		try {
+			saveGroups(entityGroups);
+		} catch (e) {
+			console.error('Error persisting groups:', e);
+		}
 	});
 
 	// Auto-persist persons
 	$effect(() => {
-		savePinnedPersons(selectedPersons);
+		try {
+			savePinnedPersons(selectedPersons);
+		} catch (e) {
+			console.error('Error persisting persons:', e);
+		}
 	});
 
 	// Auto-persist settings
 	$effect(() => {
-		saveSettings({ darkMode, defaultSearchMode: searchMode });
+		try {
+			saveSettings({ darkMode, defaultSearchMode: searchMode });
+		} catch (e) {
+			console.error('Error persisting settings:', e);
+		}
 	});
 
 	// Close popups on click-outside
