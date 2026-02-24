@@ -103,7 +103,7 @@
 	);
 
 	// Entity pin + color grouping
-	const PASTEL_COLORS = ['#FFB3BA', '#FFDFBA', '#FFFFBA', '#BAFFC9', '#BAE1FF', '#E8BAFF', '#FFB3E6', '#C4C4C4'];
+	const PASTEL_COLORS = ['#FFB3BA', '#FFDFBA', '#FFFFBA', '#BAFFC9', '#BAE1FF', '#E8BAFF', '#FFB3E6', '#D4A5FF'];
 	let entityGroups: Array<{ id: string; name: string; color: string; entityCiks: string[]; createdAt: number }> = $state(persistedFavorites?.groups ?? []);
 	let colorPickerTarget: string | null = $state(null);
 	let longPressTimer: ReturnType<typeof setTimeout> | undefined;
