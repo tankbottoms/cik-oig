@@ -71,28 +71,9 @@
 	// Load persisted favorites on init
 	let persistedFavorites = $state(loadFavorites());
 
-	// Track settings state changes
-	let settingsOpenTracker = $derived(settingsOpen);
-	$effect.pre(() => {
-		console.log(`[SETTINGS-TRACKER] settingsOpen changed to: ${settingsOpenTracker}`);
-	});
-
 	$effect(() => {
-		try {
-			console.log(`[SETTINGS-EFFECT] Running with settingsOpen=${settingsOpen}`);
-			if (settingsOpen) {
-				try {
-					console.log(`[SETTINGS] Loading favorites for settings panel`);
-					const loaded = loadFavorites();
-					console.log(`[SETTINGS] loadFavorites returned:`, loaded);
-					persistedFavorites = loaded;
-					console.log(`[SETTINGS] Loaded: ${persistedFavorites?.entities?.length || 0} entities, ${persistedFavorites?.groups?.length || 0} groups`);
-				} catch (e) {
-					console.error(`[SETTINGS] Error loading favorites:`, e);
-				}
-			}
-		} catch (e) {
-			console.error(`[SETTINGS-EFFECT] Effect error:`, e);
+		if (settingsOpen) {
+			persistedFavorites = loadFavorites();
 		}
 	});
 
@@ -173,8 +154,6 @@
 	function handleDocumentClick(e: MouseEvent) {
 		const target = e.target as HTMLElement | null;
 		if (!target) return;
-		const targetClass = target.className;
-
 		// Close group popup if clicking outside it and its toggle button
 		if (groupPopupOpen) {
 			if (!target.closest?.('.group-popup') && !target.closest?.('.group-entities-btn')) {
@@ -192,7 +171,6 @@
 			const inSettings = target.closest?.('.settings-popup');
 			const isSettingsBtn = target.closest?.('.settings-toggle');
 			if (!inSettings && !isSettingsBtn) {
-				console.log(`[SETTINGS] Closing settings, clicked on: ${targetClass}`);
 				settingsOpen = false;
 			}
 		}
@@ -259,9 +237,7 @@
 	function selectEntity(entity: SelectedEntity) {
 		if (debounceTimer) { clearTimeout(debounceTimer); debounceTimer = undefined; }
 		if (!selectedEntities.some(e => e.cik === entity.cik && e.name === entity.name)) {
-			console.log(`[ENTITY] Adding entity #${selectedEntities.length + 1}: ${entity.name}`);
 			selectedEntities = [...selectedEntities, entity];
-			console.log(`[ENTITY] Total entities now: ${selectedEntities.length}`);
 		}
 		query = '';
 		dropdownVisible = false;
@@ -296,11 +272,9 @@
 
 	function toggleEntityPin(cik: string, name: string) {
 		if (longPressTriggered) { longPressTriggered = false; return; }
-		console.log(`[PIN] Toggling pin for ${name} (currently pinned: ${selectedEntities.find(e => e.cik === cik && e.name === name)?.pinned ?? false})`);
 		selectedEntities = selectedEntities.map(e =>
 			e.cik === cik && e.name === name ? { ...e, pinned: !e.pinned } : e
 		);
-		console.log(`[PIN] Pin toggled, pinned count: ${selectedEntities.filter(e => e.pinned).length}`);
 	}
 
 	function setEntityColor(cik: string, name: string, color: string) {
@@ -818,24 +792,18 @@
 	// Create new group
 	function saveEntityGroup() {
 		try {
-			console.log(`[GROUP] Starting saveEntityGroup with ${selectedEntities.length} entities`);
 			if (!groupTagInput.trim()) return;
 			const tagName = groupTagInput.trim();
-			console.log(`[GROUP] Tag name: "${tagName}"`);
 
 			// Pick a color not already in use
 			const usedColors = new Set(entityGroups.map(g => g.color));
-			console.log(`[GROUP] Used colors: ${Array.from(usedColors).join(', ')}, PASTEL_COLORS length: ${PASTEL_COLORS.length}`);
 			const available = PASTEL_COLORS.filter(c => !usedColors.has(c));
 			const color = available.length > 0
 				? available[Math.floor(Math.random() * available.length)]
 				: PASTEL_COLORS[Math.floor(Math.random() * PASTEL_COLORS.length)];
-			console.log(`[GROUP] Assigned color: ${color}, available colors: ${available.length}`);
 
 			// Assign color to all uncolored entities
-			console.log(`[GROUP] Before color assignment: ${selectedEntities.filter(e => !e.color).length} uncolored entities`);
 			selectedEntities = selectedEntities.map(e => e.color ? e : { ...e, color });
-			console.log(`[GROUP] After color assignment: ${selectedEntities.filter(e => e.color).length} colored entities`);
 
 			// Build group directly
 			const newGroup = {
@@ -845,22 +813,15 @@
 				entityCiks: selectedEntities.filter(e => e.color === color).map(e => e.cik),
 				createdAt: Date.now(),
 			};
-			console.log(`[GROUP] New group created: ${newGroup.name} with ${newGroup.entityCiks.length} entities`);
 
 			// Merge with existing groups (rebuild from entity colors, then override name for this color)
-			console.log(`[GROUP] Calling rebuildGroups() with ${selectedEntities.length} entities`);
 			rebuildGroups();
-			console.log(`[GROUP] Rebuilt groups: ${entityGroups.length} groups`);
-
-			console.log(`[GROUP] Updating group names...`);
 			entityGroups = entityGroups.map(g => g.color === color ? { ...g, name: tagName, id: newGroup.id } : g);
-			console.log(`[GROUP] Updated group name, completed. Total groups: ${entityGroups.length}`);
 
 			groupTagInput = '';
 			groupPopupOpen = false;
-			console.log(`[GROUP] saveEntityGroup completed successfully`);
 		} catch (e) {
-			console.error('Error saving entity group:', e, e instanceof Error ? e.stack : '');
+			console.error('Error saving entity group:', e);
 		}
 	}
 
@@ -961,21 +922,7 @@
 
 <div class="app" class:search-active={searchActive}>
 	<div class="top-controls">
-		<button class="settings-toggle" onclick={() => {
-			console.log(`[SETTINGS] Clicked, current state: ${settingsOpen}, searchActive: ${searchActive}`);
-			settingsOpen = !settingsOpen;
-			console.log(`[SETTINGS] New state: ${settingsOpen}`);
-			// Reload favorites data immediately when opening settings
-			if (settingsOpen) {
-				try {
-					console.log(`[SETTINGS] Reloading favorites from button click`);
-					persistedFavorites = loadFavorites();
-					console.log(`[SETTINGS] Loaded: ${persistedFavorites?.entities?.length || 0} entities`);
-				} catch (e) {
-					console.error(`[SETTINGS] Error loading in button click:`, e);
-				}
-			}
-		}} title="Settings">
+		<button class="settings-toggle" onclick={() => settingsOpen = !settingsOpen} title="Settings">
 			<i class="fa-thin fa-gear"></i>
 		</button>
 		<button class="theme-toggle" onclick={toggleTheme} title="Toggle dark mode">
