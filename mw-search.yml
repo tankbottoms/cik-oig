@@ -1,0 +1,228 @@
+- generic [ref=e224]:
+  - generic [ref=e225]:
+    - button "" [ref=e226] [cursor=pointer]:
+      - generic [ref=e227]: 
+    - button "DARK" [ref=e228] [cursor=pointer]
+  - generic [ref=e229]:
+    - generic [ref=e230]: SEC EDGAR x OIG
+    - generic [ref=e231]: Entity Search + Exclusion Cross-Reference
+    - generic [ref=e232]: 1,021,688 entities indexed
+    - generic [ref=e233]:
+      - text: Search any SEC-registered entity by name or CIK number. The tool pulls filings from EDGAR, extracts affiliated persons from signatures, officer lists, and narrative disclosures, then cross-references each name against the HHS OIG exclusion database (LEIE). Matched names link directly to the OIG verification page. Use
+      - generic [ref=e234]: 
+      - text: to pin names you want to keep across searches.
+    - generic [ref=e235]:
+      - button "" [ref=e236] [cursor=pointer]:
+        - generic [ref=e237]: 
+      - generic [ref=e238]:
+        - generic [ref=e240]:
+          - text: MW MEDICAL INC | 0001059577
+          - button "Pin" [ref=e241] [cursor=pointer]:
+            - generic [ref=e242]: 
+          - button "Remove MW MEDICAL INC" [ref=e243] [cursor=pointer]: x
+        - button "" [ref=e244] [cursor=pointer]:
+          - generic [ref=e245]: 
+        - textbox "Add another entity or name..." [ref=e246]
+      - button "CLEAR" [ref=e247] [cursor=pointer]
+      - button "SEARCH" [ref=e248] [cursor=pointer]
+  - generic [ref=e249]:
+    - generic [ref=e250]:
+      - generic [ref=e251]:
+        - generic [ref=e252]: Extracted Names - OIG Status
+        - generic [ref=e254]: 1 MATCH
+      - generic [ref=e255]:
+        - generic [ref=e256]:
+          - generic [ref=e257]:
+            - button "Robert B. Spertell" [ref=e259]:
+              - link "Robert B. Spertell" [ref=e260] [cursor=pointer]:
+                - /url: /api/oig/verify?lastName=Spertell&firstName=Robert
+            - generic [ref=e261]: Pre-loaded
+          - generic [ref=e262]:
+            - generic [ref=e263]: MATCH - 1128b4
+            - button "" [ref=e264] [cursor=pointer]:
+              - generic [ref=e265]: 
+        - generic [ref=e266]:
+          - button "" [ref=e267] [cursor=pointer]:
+            - generic [ref=e268]: 
+          - generic [ref=e269]: ROBERT SPERTELL -- 1128(b)(4)
+          - button "x" [ref=e270] [cursor=pointer]
+        - generic [ref=e271]:
+          - generic [ref=e272]:
+            - generic [ref=e273]:
+              - generic [ref=e274]: Identity
+              - generic [ref=e275]:
+                - generic [ref=e276]:
+                  - generic [ref=e277]: Last Name
+                  - generic [ref=e278]: SPERTELL
+                - generic [ref=e279]:
+                  - generic [ref=e280]: First Name
+                  - generic [ref=e281]: ROBERT
+                - generic [ref=e282]:
+                  - generic [ref=e283]: Middle
+                  - generic [ref=e284]: B
+                - generic [ref=e285]:
+                  - generic [ref=e286]: DOB
+                  - generic [ref=e287]: 04/18/1949
+            - generic [ref=e288]:
+              - generic [ref=e289]: Professional
+              - generic [ref=e290]:
+                - generic [ref=e291]:
+                  - generic [ref=e292]: NPI
+                  - generic [ref=e293]: "0000000000"
+                - generic [ref=e294]:
+                  - generic [ref=e295]: UPIN
+                  - generic [ref=e296]: A47027
+                - generic [ref=e297]:
+                  - generic [ref=e298]: General
+                  - generic [ref=e299]: MEDICAL PRACTICE, MD
+                - generic [ref=e300]:
+                  - generic [ref=e301]: Specialty
+                  - generic [ref=e302]: GENERAL PRACTICE/FP
+            - generic [ref=e303]:
+              - generic [ref=e304]: Location
+              - generic [ref=e306]:
+                - generic [ref=e307]: Address
+                - generic [ref=e308]: "801 BREWSTER AVE, #240, REDWOOD CITY, CA 94063"
+            - generic [ref=e309]:
+              - generic [ref=e310]: Exclusion
+              - generic [ref=e311]:
+                - generic [ref=e312]:
+                  - generic [ref=e313]: Type
+                  - generic [ref=e314]: 1128(b)(4)
+                - generic [ref=e315]:
+                  - generic [ref=e316]: Date
+                  - generic [ref=e317]: 10/09/1991
+                - generic [ref=e318]:
+                  - generic [ref=e319]: Reinstatement
+                  - generic [ref=e320]: None
+                - generic [ref=e321]:
+                  - generic [ref=e322]: Waiver
+                  - generic [ref=e323]: "-"
+          - link "Verify on OIG " [ref=e325] [cursor=pointer]:
+            - /url: /api/oig/verify?lastName=SPERTELL&firstName=ROBERT
+            - text: Verify on OIG
+            - generic [ref=e326]: 
+    - generic [ref=e327]:
+      - generic [ref=e328]: How It Works
+      - generic [ref=e329]:
+        - generic [ref=e330]:
+          - heading "Data Sources" [level=4] [ref=e331]
+          - paragraph [ref=e332]:
+            - strong [ref=e333]: SEC EDGAR Entities
+            - text: "-- 1,021,688 entities are indexed from the SEC EDGAR full company list, stored as alpha-bucketed JSON files ("
+            - code [ref=e334]: cik_a.json
+            - text: through
+            - code [ref=e335]: cik_z.json
+            - text: ", plus"
+            - code [ref=e336]: cik__.json
+            - text: for numeric/special). Each entry contains a company name and 10-digit CIK number. Fuzzy search runs client-side across loaded buckets for instant typeahead.
+          - paragraph [ref=e337]:
+            - strong [ref=e338]: OIG LEIE Database
+            - text: "-- The HHS Office of Inspector General List of Excluded Individuals/Entities (LEIE) is loaded from"
+            - code [ref=e339]: UPDATED.csv
+            - text: ", the official monthly snapshot. Records are indexed server-side by normalized last+first name keys and by business name for O(1) lookup. Each record includes exclusion type, date, address, NPI, specialty, and reinstatement status."
+        - generic [ref=e340]:
+          - heading "Filing Pipeline" [level=4] [ref=e341]
+          - paragraph [ref=e342]:
+            - text: When you search an entity, the tool fetches its submission history from the SEC EDGAR
+            - code [ref=e343]: /submissions/
+            - text: "API. Filings are prioritized by form type:"
+          - list [ref=e344]:
+            - listitem [ref=e345]:
+              - strong [ref=e346]: DEF 14A / PRE 14A
+              - text: "-- Proxy statements (director/officer lists, compensation tables)"
+            - listitem [ref=e347]:
+              - strong [ref=e348]: 10-K / 10-KSB
+              - text: "-- Annual reports (signatures, officer certifications, narrative disclosures)"
+            - listitem [ref=e349]:
+              - strong [ref=e350]: 10-Q / 10-QSB
+              - text: "-- Quarterly reports (signature blocks, officer changes)"
+            - listitem [ref=e351]:
+              - strong [ref=e352]: 8-K
+              - text: "-- Current reports (appointments, departures, material events)"
+            - listitem [ref=e353]:
+              - strong [ref=e354]: S-1
+              - text: "-- Registration statements (management bios, affiliated persons)"
+          - paragraph [ref=e355]: Up to 20 filings are fetched and parsed for names. Each filing's HTML is stripped of tags and scanned with pattern-based extraction.
+        - generic [ref=e356]:
+          - heading "Name Extraction Patterns" [level=4] [ref=e357]
+          - paragraph [ref=e358]: The name extractor applies 10 regex patterns to each filing document. Names must start with an uppercase letter, not appear in a blocklist of ~150 common words (titles, legal terms, financial jargon), and have both first and last name components between 2-30 characters.
+          - table [ref=e359]:
+            - rowgroup [ref=e360]:
+              - row "# Pattern Example Match" [ref=e361]:
+                - columnheader "#" [ref=e362]
+                - columnheader "Pattern" [ref=e363]
+                - columnheader "Example Match" [ref=e364]
+            - rowgroup [ref=e365]:
+              - row "1 /s/ signature blocks /s/ John A. Smith" [ref=e366]:
+                - cell "1" [ref=e367]
+                - cell "/s/ signature blocks" [ref=e368]:
+                  - code [ref=e369]: /s/
+                  - text: signature blocks
+                - cell "/s/ John A. Smith" [ref=e370]
+              - 'row "2 By: signature lines By: /s/ Jane Doe" [ref=e371]':
+                - cell "2" [ref=e372]
+                - 'cell "By: signature lines" [ref=e373]':
+                  - code [ref=e374]: "By:"
+                  - text: signature lines
+                - 'cell "By: /s/ Jane Doe" [ref=e375]'
+              - row "3 Name, Title Albert Bourla, Chief Executive Officer" [ref=e376]:
+                - cell "3" [ref=e377]
+                - cell "Name, Title" [ref=e378]
+                - cell "Albert Bourla, Chief Executive Officer" [ref=e379]
+              - 'row "4 Title: Name CEO: Albert Bourla" [ref=e380]':
+                - cell "4" [ref=e381]
+                - 'cell "Title: Name" [ref=e382]'
+                - 'cell "CEO: Albert Bourla" [ref=e383]'
+              - 'row "5 SGML headers FILED BY: John Smith" [ref=e384]':
+                - cell "5" [ref=e385]
+                - cell "SGML headers" [ref=e386]
+                - 'cell "FILED BY: John Smith" [ref=e387]'
+              - row "6 Director/nominee lists Jane Doe 58 2019" [ref=e388]:
+                - cell "6" [ref=e389]
+                - cell "Director/nominee lists" [ref=e390]
+                - cell "Jane Doe 58 2019" [ref=e391]
+              - row "7 Narrative context Jane Doe has served as..." [ref=e392]:
+                - cell "7" [ref=e393]
+                - cell "Narrative context" [ref=e394]
+                - cell "Jane Doe has served as..." [ref=e395]
+              - row "8 Departures Robert Spertell, resigned as..." [ref=e396]:
+                - cell "8" [ref=e397]
+                - cell "Departures" [ref=e398]
+                - cell "Robert Spertell, resigned as..." [ref=e399]
+              - row "9 Role descriptions Jane Doe, a director..." [ref=e400]:
+                - cell "9" [ref=e401]
+                - cell "Role descriptions" [ref=e402]
+                - cell "Jane Doe, a director..." [ref=e403]
+              - row "10 Appointments John Smith was appointed as..." [ref=e404]:
+                - cell "10" [ref=e405]
+                - cell "Appointments" [ref=e406]
+                - cell "John Smith was appointed as..." [ref=e407]
+        - generic [ref=e408]:
+          - heading "OIG Cross-Reference" [level=4] [ref=e409]
+          - paragraph [ref=e410]:
+            - text: Extracted names are batched and checked against the OIG LEIE database. Matching uses normalized keys (lowercase, alphanumeric only). An
+            - strong [ref=e411]: exact match
+            - text: requires both last name and first name to match. A
+            - strong [ref=e412]: partial match
+            - text: triggers when the last name matches and first name is a prefix match (e.g., "Rob" matches "Robert"). Business names are also checked with substring matching.
+          - paragraph [ref=e413]: Results link to the OIG verification page via a server-side proxy that handles the ASP.NET WebForms ViewState/PostBack mechanism to submit the search form and return official results.
+        - generic [ref=e414]:
+          - heading "Search Modes" [level=4] [ref=e415]
+          - paragraph [ref=e416]:
+            - text: Use the
+            - generic [ref=e417]: 
+            - text: /
+            - generic [ref=e418]: 
+            - text: "toggle to switch between modes:"
+          - list [ref=e419]:
+            - listitem [ref=e420]:
+              - strong [ref=e421]: Entity mode
+              - text: (
+              - generic [ref=e422]: 
+              - text: ) -- Search SEC-registered entities by name or CIK. Select one or more as badges, then hit SEARCH to pull filings, extract names, and check OIG.
+            - listitem [ref=e423]:
+              - strong [ref=e424]: Person mode
+              - text: (
+              - generic [ref=e425]: 
+              - text: ) -- Search a person directly against the OIG exclusion database. Enter as "Last, First" or "First Last" -- the tool parses either format.

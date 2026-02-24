@@ -1184,7 +1184,8 @@
 					<div class="panel-header">ENTITIES</div>
 					<div class="entity-summary-list">
 						{#each selectedEntities as entity (`${entity.cik}_${entity.name}`)}
-							<div class="entity-summary-row">
+							{@const entityKey = `${entity.cik}_${entity.name}`}
+							<div class="entity-summary-row" style={entity.color ? `border-left: 3px solid ${entity.color}` : ''}>
 								<div class="entity-summary-left">
 									<div class="entity-summary-name">
 										<a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={entity.cik}&type=&dateb=&owner=include&count=40"
@@ -1214,9 +1215,24 @@
 									<button type="button"
 										class="pin-btn" class:pinned={entity.pinned}
 										onclick={() => toggleEntityPin(entity.cik, entity.name)}
-										title={entity.pinned ? 'Unpin entity' : 'Pin to persist across sessions'}>
+										onpointerdown={() => handlePinPointerDown(entityKey)}
+										onpointerup={handlePinPointerUp}
+										onpointerleave={handlePinPointerUp}
+										title={entity.pinned ? 'Unpin entity' : 'Long-press to change color'}>
 										<i class={entity.pinned ? 'fas fa-thumbtack' : 'fa-thin fa-thumbtack'}></i>
 									</button>
+									{#if colorPickerTarget === entityKey}
+										<div class="color-picker-popup">
+											{#each PASTEL_COLORS as color}
+												<button type="button" class="color-swatch" style="background: {color}"
+													onclick={() => setEntityColor(entity.cik, entity.name, color)}
+													aria-label="Set color"></button>
+											{/each}
+											<button type="button" class="color-swatch color-swatch-clear"
+												onclick={() => setEntityColor(entity.cik, entity.name, '')}
+												aria-label="Clear color">x</button>
+										</div>
+									{/if}
 								</div>
 							</div>
 						{/each}
@@ -2732,6 +2748,6 @@
 	.entity-summary-link:hover { text-decoration: underline; }
 	.entity-summary-meta { margin-top: 0.15rem; }
 	.entity-summary-forms { display: flex; gap: 0.25rem; flex-wrap: wrap; margin-top: 0.3rem; }
-	.entity-summary-right { display: flex; align-items: center; gap: var(--spacing-sm); flex-shrink: 0; }
+	.entity-summary-right { position: relative; display: flex; align-items: center; gap: var(--spacing-sm); flex-shrink: 0; }
 
 </style>
