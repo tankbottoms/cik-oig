@@ -68,6 +68,9 @@
 		return allResults.sort((a, b) => b.score - a.score).slice(0, limit).map(({ name, cik }) => ({ name, cik }));
 	}
 
+	// C2: Settings -- declared early so $effects below can reference it safely
+	let settingsOpen = $state(false);
+
 	// Load persisted favorites on init
 	let persistedFavorites = $state(loadFavorites());
 
@@ -312,6 +315,8 @@
 	}
 
 	function rebuildGroups() {
+		// Snapshot current groups before reassignment so .find() reads old state
+		const prevGroups = [...entityGroups];
 		const colorMap = new Map<string, string[]>();
 		for (const e of selectedEntities) {
 			if (e.color) {
@@ -323,7 +328,7 @@
 		entityGroups = Array.from(colorMap.entries())
 			.filter(([_, ciks]) => ciks.length >= 1)
 			.map(([color, entityCiks]) => {
-				const existing = entityGroups.find(g => g.color === color);
+				const existing = prevGroups.find(g => g.color === color);
 				const persisted = persistedFavorites?.groups?.find((g: any) => g.color === color);
 				return {
 					id: existing?.id || persisted?.id || crypto.randomUUID(),
@@ -766,8 +771,6 @@
 		window.open(url, `filing_${form}_${date}`, 'width=1000,height=700,scrollbars=yes,resizable=yes');
 	}
 
-	// C2: Settings
-	let settingsOpen = $state(false);
 
 	// C4: Entity grouping glyph - add to existing group
 	function addEntitiesToGroup(groupId: string) {
@@ -922,7 +925,7 @@
 
 <div class="app" class:search-active={searchActive}>
 	<div class="top-controls">
-		<button class="settings-toggle" onclick={() => settingsOpen = !settingsOpen} title="Settings">
+		<button class="settings-toggle" onclick={(e) => { e.stopPropagation(); settingsOpen = !settingsOpen; }} title="Settings">
 			<i class="fa-thin fa-gear"></i>
 		</button>
 		<button class="theme-toggle" onclick={toggleTheme} title="Toggle dark mode">
@@ -1221,18 +1224,6 @@
 										title={entity.pinned ? 'Unpin entity' : 'Long-press to change color'}>
 										<i class={entity.pinned ? 'fas fa-thumbtack' : 'fa-thin fa-thumbtack'}></i>
 									</button>
-									{#if colorPickerTarget === entityKey}
-										<div class="color-picker-popup">
-											{#each PASTEL_COLORS as color}
-												<button type="button" class="color-swatch" style="background: {color}"
-													onclick={() => setEntityColor(entity.cik, entity.name, color)}
-													aria-label="Set color"></button>
-											{/each}
-											<button type="button" class="color-swatch color-swatch-clear"
-												onclick={() => setEntityColor(entity.cik, entity.name, '')}
-												aria-label="Clear color">x</button>
-										</div>
-									{/if}
 								</div>
 							</div>
 						{/each}
