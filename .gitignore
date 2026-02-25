@@ -30,3 +30,7 @@ vite.config.ts.timestamp-*
 
 # Git Worktrees
 .worktrees
+
+# QA artifacts
+QA_TEST_REPORT.md
+*.png

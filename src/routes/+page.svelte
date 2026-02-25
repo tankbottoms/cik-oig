@@ -806,15 +806,17 @@
 			const group = entityGroups.find(g => g.id === groupId);
 			if (!group) return;
 
-			// Apply group color to all uncolored selected entities
+			// Apply group color to all uncolored entities (those not already in a group)
 			selectedEntities = selectedEntities.map(e => {
-				if (!e.color) {
+				if (!e.color || e.color === group.color) {
 					return { ...e, color: group.color };
 				}
 				return e;
 			});
 			rebuildGroups();
 			groupPopupOpen = false;
+			// Keep persistedFavorites in sync to avoid stale state in settings
+			try { persistedFavorites = loadFavorites(); } catch {}
 		} catch (e) {
 			console.error('Error adding entities to group:', e);
 		}
@@ -851,6 +853,8 @@
 
 			groupTagInput = '';
 			groupPopupOpen = false;
+			// Keep persistedFavorites in sync
+			try { persistedFavorites = loadFavorites(); } catch {}
 		} catch (e) {
 			console.error('Error saving entity group:', e);
 		}
@@ -976,10 +980,10 @@
 				</div>
 
 				<!-- Pinned Entities -->
-				{#if persistedFavorites.entities.length > 0}
+				{#if (persistedFavorites?.entities?.length ?? 0) > 0}
 					<div class="settings-section">
 						<div class="settings-section-label">PINNED ENTITIES</div>
-						{#each persistedFavorites.entities as entity (entity.cik)}
+						{#each persistedFavorites.entities as entity, i (`${entity.cik}_${entity.name}_${i}`)}
 							<div class="settings-favorite-row">
 								<span class="settings-fav-name">{entity.name}</span>
 								<span class="settings-fav-cik">{entity.cik}</span>
@@ -1004,10 +1008,10 @@
 				{/if}
 
 				<!-- Recent History -->
-				{#if (persistedFavorites.entityHistory ?? []).length > 0}
+				{#if (persistedFavorites?.entityHistory ?? []).length > 0}
 					<div class="settings-section">
 						<div class="settings-section-label">RECENT</div>
-						{#each (persistedFavorites.entityHistory ?? []).slice(0, 20) as entity (entity.cik)}
+						{#each (persistedFavorites.entityHistory ?? []).slice(0, 20) as entity, i (`${entity.cik}_${i}`)}
 							<div class="settings-favorite-row">
 								<span class="settings-fav-name">{entity.name}</span>
 								<span class="settings-fav-cik">{entity.cik}</span>
