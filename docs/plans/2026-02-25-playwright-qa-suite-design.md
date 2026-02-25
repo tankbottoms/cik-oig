@@ -1,65 +1,70 @@
 # Playwright QA Suite Design
 
+Status: **Implemented** (2026-02-25)
+
 ## Goal
 
 Automated end-to-end test suite that exercises the full CIK-OIG user workflow: adding entities, pinning, grouping, tagging, searching/downloading accessions, and verifying settings persistence. Tests must be repeatable, order-independent, and run across phone/tablet/desktop breakpoints against both dev and production builds.
 
 ## Test Entities
 
-- Dynamic Associates
-- Legal Access Technologies
-- MW Medical Inc (pre-loaded default)
-- Davi Skin (both CIK variants)
+- Dynamic Associates (CIK 0001909492)
+- Legal Access Technologies (CIK 0001909736)
+- MW Medical Inc (CIK 0001059577, pre-loaded default)
+- Davi Skin (CIK 0001819446)
 
 ## File Structure
 
 ```
 tests/
-  playwright.config.ts
+  playwright.config.ts       -- ports 5188/4188, 6 projects, Chromium only
   helpers/
-    entities.ts          -- entity constants, test data
-    actions.ts           -- reusable page actions
+    entities.ts              -- entity constants, test data, extra entities
+    actions.ts               -- reusable page actions (freshStart, addEntity, etc.)
   e2e/
-    core-workflow.spec.ts
-    settings-resilience.spec.ts
-    order-independence.spec.ts
-    responsive.spec.ts
-    stress.spec.ts
+    core-workflow.spec.ts    -- 1 test
+    settings-resilience.spec.ts -- 2 tests
+    order-independence.spec.ts  -- 5 tests
+    responsive.spec.ts       -- 3 tests
+    stress.spec.ts           -- 5 tests
+    tag-group-workflow.spec.ts  -- 6 tests (tag naming, color, person mode, history)
 ```
 
-## Test Specs
+## Results
 
-### core-workflow.spec.ts
-Full user journey: clear state -> add 5 entities via search -> pin each -> create group "Cane Entities" -> change group color -> hit SEARCH -> wait for pipeline -> open settings -> verify pinned entities, saved groups, recent history -> close settings -> reopen -> verify persistence.
+22 tests x 6 configurations = 132 total executions, all passing.
 
-### settings-resilience.spec.ts
-Open/close settings panel at every intermediate state: before adding entities, after adding each entity, after pinning, after grouping, after search, after clearing. Verifies no crash at any point.
+| Configuration | Tests | Status |
+|---------------|-------|--------|
+| dev-desktop (1440x900) | 22 | PASS |
+| dev-tablet (820x1180) | 22 | PASS |
+| dev-phone (390x844) | 22 | PASS |
+| prod-desktop (1440x900) | 22 | PASS |
+| prod-tablet (820x1180) | 22 | PASS |
+| prod-phone (390x844) | 22 | PASS |
 
-### order-independence.spec.ts
-Runs the same operations (add, pin, group, search, settings) in multiple shuffled orders. Verifies all combinations work.
+## Config Details
 
-### responsive.spec.ts
-Runs core workflow at three breakpoints:
-- Phone: 390x844 (iPhone 13)
-- Tablet: 820x1180 (iPad)
-- Desktop: 1440x900
-
-### stress.spec.ts
-Rapid entity additions, group creation, settings toggle cycles. Adds 10+ entities, creates multiple groups, rapidly toggles settings.
-
-## Config
-
-- `webServer` auto-starts dev or preview server
-- Projects: `dev` (vite dev), `prod` (vite build + preview)
-- Retries: 1 on CI, 0 locally
-- Screenshots on failure
-- HTML reporter
+- Dedicated test ports: dev=5188, prod=4188 (avoids collision with other dev servers)
+- All projects use Chromium (only browser installed)
+- Tablet/phone use `isMobile: true` and `hasTouch: true` with appropriate user agents
+- `webServer` auto-starts vite dev or builds+previews
+- Screenshots on failure, video retained on failure, trace on first retry
+- HTML reporter (open: never)
 
 ## Package Scripts
 
 ```json
-"test": "npx playwright test",
-"test:dev": "npx playwright test --project=dev-desktop",
-"test:prod": "npx playwright test --project=prod-desktop",
-"test:ui": "npx playwright test --ui"
+"test": "npx playwright test --config tests/playwright.config.ts",
+"test:dev": "npx playwright test --config tests/playwright.config.ts --project=dev-desktop",
+"test:prod": "npx playwright test --config tests/playwright.config.ts --project=prod-desktop",
+"test:tags": "npx playwright test --config tests/playwright.config.ts --project=dev-desktop tag-group-workflow",
+"test:all": "... sequential per-project run (most reliable)",
+"test:ui": "npx playwright test --config tests/playwright.config.ts --ui"
 ```
+
+## Bugs Found and Fixed During QA
+
+1. **Stale persistedFavorites after group operations** -- `persistedFavorites` was not reloaded after `addEntitiesToGroup()` and `saveEntityGroup()`, causing settings panel to show stale data.
+2. **Null-safe access on persistedFavorites** -- `persistedFavorites.entities.length` crashed when entities was undefined. Fixed with optional chaining and nullish coalescing.
+3. **Duplicate #each keys** -- Settings panel used `entity.cik` as key, which collided when the same entity appeared in multiple contexts. Fixed with composite keys including index.

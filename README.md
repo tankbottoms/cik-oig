@@ -129,6 +129,19 @@ static/
 scripts/
   filter-healthcare-ciks.ts  Parse CIK data into bucketed JSON
   download-oig-csv.ts        Download latest OIG CSV
+
+tests/
+  playwright.config.ts       Playwright config (ports, viewports, projects)
+  helpers/
+    actions.ts               Reusable page actions (addEntity, pinEntity, etc.)
+    entities.ts              Test entity data and constants
+  e2e/
+    core-workflow.spec.ts    Full user journey test
+    settings-resilience.spec.ts  Settings crash resistance
+    order-independence.spec.ts   Operation ordering variations
+    responsive.spec.ts       Viewport-specific tests
+    stress.spec.ts           Load and rapid interaction tests
+    tag-group-workflow.spec.ts   Group tagging and color tests
 ```
 
 ## Name Extraction Patterns
@@ -174,6 +187,43 @@ Filings are processed in priority order (up to 20 per entity):
 - TypeScript
 - Neo-brutalist CSS (no framework)
 
+## Testing
+
+Automated QA suite using [Playwright](https://playwright.dev/). 22 tests run across 6 configurations (3 viewports x 2 build targets).
+
+```bash
+bun run test:dev     # Dev server, desktop viewport (~1 min)
+bun run test:prod    # Production build, desktop viewport (~1.5 min)
+bun run test         # All 6 configurations at once
+bun run test:all     # Sequential per-project (most reliable)
+bun run test:ui      # Interactive Playwright UI
+bun run test:tags    # Tag/group workflow tests only
+```
+
+### Test Suites
+
+| Suite | Tests | Coverage |
+|-------|-------|----------|
+| Core Workflow | 1 | Full journey: add entities, pin, group, tag, search, verify settings |
+| Settings Resilience | 2 | Open/close settings at every state without crash |
+| Order Independence | 5 | Same operations in different orderings |
+| Responsive | 3 | Core workflow at each viewport size |
+| Stress | 5 | 10+ entities, rapid toggle, add/remove cycles, clear data |
+| Tag/Group Workflow | 6 | Tag naming, color picker, person mode, recent history |
+
+### Viewports
+
+- **Desktop**: 1440x900
+- **Tablet**: 820x1180 (iPad)
+- **Phone**: 390x844 (iPhone 13)
+
+### Build Targets
+
+- **Dev**: `vite dev` on port 5188
+- **Prod**: `vite build && vite preview` on port 4188
+
+Test configuration: `tests/playwright.config.ts`
+
 ## Scripts
 
 ```bash
@@ -183,6 +233,9 @@ bun run preview      # Preview production build
 bun run data:ciks    # Regenerate CIK bucket files
 bun run data:oig     # Download latest OIG exclusion CSV
 bun run data:all     # Run both data scripts
+bun run test:dev     # Run tests against dev server
+bun run test:prod    # Run tests against production build
+bun run test:all     # Run all test configurations
 ```
 
 ## License
