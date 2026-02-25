@@ -5,6 +5,15 @@
 	import type { HealthcareEntity, SelectedEntity, SECSubmission, ParsedName, ExtractedNameResult, OIGSearchResult, FilingRef, SearchMode, PersistedFavorites } from '$lib/types';
 	import { loadFavorites, savePinnedEntities, saveGroups, savePinnedPersons, saveSettings, saveFavorites } from '$lib/persistence';
 
+	// Fetch with timeout helper
+	function fetchWithTimeout(url: string, options: RequestInit & { timeout?: number } = {}) {
+		const { timeout = 30000, ...fetchOptions } = options;
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), timeout);
+		return fetch(url, { ...fetchOptions, signal: controller.signal })
+			.finally(() => clearTimeout(timeoutId));
+	}
+
 	// Auto-scroll terminal log
 	$effect(() => {
 		$logLines;
@@ -565,13 +574,20 @@
 		extractedNames.update(n => [...n, nameEntry]);
 
 		try {
-			const resp = await fetch('/api/oig/search', {
+			const resp = await fetchWithTimeout('/api/oig/search', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ names: [{ firstName, lastName, middleName }], businesses: [nameStr] }),
+				timeout: 30000,
 			});
+			if (!resp.ok) {
+				addLog(`OIG API error: ${resp.status} ${resp.statusText}`, 'error');
+				return;
+			}
 			const result = await resp.json();
-			updateOIGResults(result.results);
+			if (result.results) {
+				updateOIGResults(result.results);
+			}
 		} catch (err) {
 			addLog(`OIG check failed: ${err instanceof Error ? err.message : 'Unknown'}`, 'error');
 		}
@@ -697,13 +713,20 @@
 	async function checkNamesAgainstOIG(names: ParsedName[]) {
 		addLog(`Checking ${names.length} name(s) against OIG exclusion list...`, 'fetch');
 		try {
-			const resp = await fetch('/api/oig/search', {
+			const resp = await fetchWithTimeout('/api/oig/search', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ names: names.map(n => ({ firstName: n.firstName, lastName: n.lastName, middleName: n.middleName })) }),
+				timeout: 30000,
 			});
+			if (!resp.ok) {
+				addLog(`OIG API error: ${resp.status} ${resp.statusText}`, 'error');
+				return;
+			}
 			const result = await resp.json();
-			updateOIGResults(result.results);
+			if (result.results) {
+				updateOIGResults(result.results);
+			}
 		} catch (err) {
 			addLog(`OIG check failed: ${err instanceof Error ? err.message : 'Unknown'}`, 'error');
 		}
