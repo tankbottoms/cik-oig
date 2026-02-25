@@ -76,7 +76,12 @@
 
 	$effect(() => {
 		if (settingsOpen) {
-			persistedFavorites = loadFavorites();
+			try {
+				persistedFavorites = loadFavorites();
+			} catch (e) {
+				console.error('Error loading favorites for settings:', e);
+				// Keep existing persistedFavorites on error
+			}
 		}
 	});
 
@@ -962,10 +967,10 @@
 				{/if}
 
 				<!-- Saved Groups -->
-				{#if persistedFavorites.groups.length > 0}
+				{#if persistedFavorites?.groups?.length > 0}
 					<div class="settings-section">
 						<div class="settings-section-label">SAVED GROUPS</div>
-						{#each persistedFavorites.groups as group (group.id)}
+						{#each (persistedFavorites?.groups ?? []) as group (group.id)}
 							<div class="settings-group-row">
 								<span class="group-color-dot" style="background: {group.color}"></span>
 								<span class="settings-group-name">{group.name} Entities ({group.entityCiks.length})</span>
