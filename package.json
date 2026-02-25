@@ -13,9 +13,16 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"data:ciks": "bun run scripts/filter-healthcare-ciks.ts",
 		"data:oig": "bun run scripts/download-oig-csv.ts",
-		"data:all": "bun run data:ciks && bun run data:oig"
+		"data:all": "bun run data:ciks && bun run data:oig",
+		"test": "npx playwright test --config tests/playwright.config.ts",
+		"test:dev": "npx playwright test --config tests/playwright.config.ts --project=dev-desktop",
+		"test:prod": "npx playwright test --config tests/playwright.config.ts --project=prod-desktop",
+		"test:tags": "npx playwright test --config tests/playwright.config.ts --project=dev-desktop tag-group-workflow",
+		"test:ui": "npx playwright test --config tests/playwright.config.ts --ui",
+		"test:all": "npx playwright test --config tests/playwright.config.ts --project=dev-desktop && npx playwright test --config tests/playwright.config.ts --project=dev-tablet && npx playwright test --config tests/playwright.config.ts --project=dev-phone && npx playwright test --config tests/playwright.config.ts --project=prod-desktop && npx playwright test --config tests/playwright.config.ts --project=prod-tablet && npx playwright test --config tests/playwright.config.ts --project=prod-phone"
 	},
 	"devDependencies": {
+		"@playwright/test": "^1.58.2",
 		"@sveltejs/adapter-auto": "^7.0.0",
 		"@sveltejs/adapter-vercel": "^6.3.2",
 		"@sveltejs/kit": "^2.50.2",

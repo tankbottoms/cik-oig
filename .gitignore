@@ -34,3 +34,9 @@ vite.config.ts.timestamp-*
 # QA artifacts
 QA_TEST_REPORT.md
 *.png
+
+# Playwright
+test-results/
+playwright-report/
+tests/screenshots/
+blob-report/
