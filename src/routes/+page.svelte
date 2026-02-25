@@ -1000,7 +1000,7 @@
 						{#each (persistedFavorites?.groups ?? []) as group (group.id)}
 							<div class="settings-group-row">
 								<span class="group-color-dot" style="background: {group.color}"></span>
-								<span class="settings-group-name">{group.name} Entities ({group.entityCiks.length})</span>
+								<span class="settings-group-name">{group.name} ({group.entityCiks.length})</span>
 								<button class="settings-fav-add" onclick={() => quickLoadGroup(group)} title="Load group">LOAD</button>
 							</div>
 						{/each}
@@ -1689,6 +1689,8 @@
 	.settings-btn {
 		font-size: 0.65rem !important;
 		padding: 0.2rem 0.5rem !important;
+		min-width: 5.5rem;
+		text-align: center;
 	}
 
 	.theme-toggle {
