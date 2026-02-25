@@ -79,6 +79,51 @@
 
 	// C2: Settings -- declared early so $effects below can reference it safely
 	let settingsOpen = $state(false);
+	let bananaOpen = $state(false);
+
+	// Banana character cycling
+	const BANANA_DEFAULT = '/images/banana.png';
+	const BANANA_COUNT = 60;
+	let bananaImg = $state(BANANA_DEFAULT);
+	let bananaCycleTimer: ReturnType<typeof setInterval> | undefined;
+	let bananaIdleTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function randomCharacter(): string {
+		const n = Math.floor(Math.random() * BANANA_COUNT) + 1;
+		return `/images/characters/${String(n).padStart(2, '0')}.png`;
+	}
+
+	function startBananaCycle() {
+		stopBananaCycle();
+		bananaCycleTimer = setInterval(() => {
+			bananaImg = randomCharacter();
+		}, 300);
+	}
+
+	function stopBananaCycle() {
+		if (bananaCycleTimer) { clearInterval(bananaCycleTimer); bananaCycleTimer = undefined; }
+		if (bananaIdleTimer) { clearTimeout(bananaIdleTimer); bananaIdleTimer = undefined; }
+	}
+
+	function landOnRandom() {
+		stopBananaCycle();
+		bananaImg = randomCharacter();
+		// After 5 minutes, pick another random character
+		bananaIdleTimer = setTimeout(() => {
+			bananaImg = randomCharacter();
+		}, 5 * 60 * 1000);
+	}
+
+	$effect(() => {
+		if ($isSearching) {
+			startBananaCycle();
+		} else {
+			// Only land on character if we were cycling (not on initial load)
+			if (bananaCycleTimer) {
+				landOnRandom();
+			}
+		}
+	});
 
 	// Load persisted favorites on init
 	let persistedFavorites = $state(loadFavorites());
@@ -94,17 +139,35 @@
 		}
 	});
 
-	// State - MW Medical pre-loaded as default entity
+	// Default "Cane Entities" group
+	const DEFAULT_ENTITIES: SelectedEntity[] = [
+		{ name: 'MW MEDICAL INC', cik: '0001059577', color: '#BAFFC9' },
+		{ name: 'DYNAMIC ASSOCIATES INC', cik: '0000878146', color: '#BAFFC9' },
+		{ name: 'LEGAL ACCESS TECHNOLOGIES INC', cik: '0000878146', color: '#BAFFC9' },
+		{ name: 'DAVI SKIN INC', cik: '0001285991', color: '#BAFFC9' },
+		{ name: 'DAVI SKIN, INC.', cik: '0001059577', color: '#BAFFC9' },
+	];
+	const DEFAULT_GROUP = {
+		id: 'cane-entities-default',
+		name: 'Cane Entities',
+		color: '#BAFFC9',
+		entityCiks: DEFAULT_ENTITIES.map(e => e.cik),
+		createdAt: Date.now(),
+	};
+
+	// Hidden names -- filtered from extracted names display
+	const HIDDEN_NAMES = new Set(['mark phillips']);
+
 	let query = $state('');
 	let selectedEntities: SelectedEntity[] = $state(
 		(persistedFavorites?.entities?.length ?? 0) > 0
 			? persistedFavorites.entities
-			: [{ name: 'MW MEDICAL INC', cik: '0001059577' }]
+			: DEFAULT_ENTITIES
 	);
 	let dropdownResults: SelectedEntity[] = $state([]);
 	let dropdownVisible = $state(false);
 	let highlightedIndex = $state(0);
-	let searchActive = $state((persistedFavorites?.entities?.length ?? 0) > 0);
+	let searchActive = $state(true);
 	let inputEl: HTMLInputElement | undefined = $state();
 	let loadingDropdown = $state(false);
 	let logExpanded = $state(false);
@@ -121,12 +184,16 @@
 
 	// Entity pin + color grouping
 	const PASTEL_COLORS = ['#FFB3BA', '#FFDFBA', '#FFFFBA', '#BAFFC9', '#BAE1FF', '#E8BAFF', '#FFB3E6', '#D4A5FF'];
-	let entityGroups: Array<{ id: string; name: string; color: string; entityCiks: string[]; createdAt: number }> = $state(persistedFavorites?.groups ?? []);
+	let entityGroups: Array<{ id: string; name: string; color: string; entityCiks: string[]; createdAt: number }> = $state(
+		(persistedFavorites?.groups?.length ?? 0) > 0 ? persistedFavorites!.groups : [DEFAULT_GROUP]
+	);
 	let colorPickerTarget: string | null = $state(null);
 	let longPressTimer: ReturnType<typeof setTimeout> | undefined;
 	let longPressTriggered = false;
 	let groupTagInput = $state('');
 	let groupPopupOpen = $state(false);
+	let editingGroupId: string | null = $state(null);
+	let editingGroupName = $state('');
 	let groupInputRef: HTMLInputElement | undefined = $state();
 	let groupPopupRef: HTMLDivElement | undefined = $state();
 	let groupBtnRef: HTMLButtonElement | undefined = $state();
@@ -191,6 +258,14 @@
 				settingsOpen = false;
 			}
 		}
+		// Close banana popup if clicking outside
+		if (bananaOpen) {
+			const inPopup = target.closest?.('.banana-popup');
+			const isBananaBtn = target.closest?.('.banana-trigger');
+			if (!inPopup && !isBananaBtn) {
+				bananaOpen = false;
+			}
+		}
 	}
 
 	// Pre-pin Robert B. Spertell on mount and check against OIG
@@ -233,6 +308,7 @@
 		if (typeof document !== 'undefined') {
 			document.removeEventListener('click', handleDocumentClick);
 		}
+		stopBananaCycle();
 	});
 
 	function onInput() {
@@ -356,6 +432,10 @@
 
 	function renameGroup(groupId: string, name: string) {
 		entityGroups = entityGroups.map(g => g.id === groupId ? { ...g, name } : g);
+	}
+
+	function focusOnMount(node: HTMLElement) {
+		node.focus();
 	}
 
 	function clearSearch() {
@@ -982,8 +1062,8 @@
 				<!-- Pinned Entities -->
 				{#if (persistedFavorites?.entities?.length ?? 0) > 0}
 					<div class="settings-section">
-						<div class="settings-section-label">PINNED ENTITIES</div>
-						{#each persistedFavorites.entities as entity, i (`${entity.cik}_${entity.name}_${i}`)}
+						<div class="settings-section-label">PINNED ENTITIES ({Math.min(persistedFavorites.entities.length, 15)}/15)</div>
+						{#each persistedFavorites.entities.slice(0, 15) as entity, i (`${entity.cik}_${entity.name}_${i}`)}
 							<div class="settings-favorite-row">
 								<span class="settings-fav-name">{entity.name}</span>
 								<span class="settings-fav-cik">{entity.cik}</span>
@@ -1000,7 +1080,8 @@
 						{#each (persistedFavorites?.groups ?? []) as group (group.id)}
 							<div class="settings-group-row">
 								<span class="group-color-dot" style="background: {group.color}"></span>
-								<span class="settings-group-name">{group.name} ({group.entityCiks.length})</span>
+								<span class="settings-group-tag">{group.name}</span>
+								<span class="settings-group-count">{group.entityCiks.length}</span>
 								<button class="settings-fav-add" onclick={() => quickLoadGroup(group)} title="Load group">LOAD</button>
 							</div>
 						{/each}
@@ -1130,11 +1211,37 @@
 								{#if entityGroups.length > 0}
 									<div class="group-section-label">ADD TO EXISTING</div>
 									{#each entityGroups as group}
-										<button type="button" class="group-item-clickable"
-											onclick={() => addEntitiesToGroup(group.id)}>
+										<div class="group-item-row">
 											<span class="group-color-dot" style="background: {group.color}"></span>
-											<span>{group.name} ({group.entityCiks.length})</span>
-										</button>
+											{#if editingGroupId === group.id}
+												<input
+													class="group-rename-input"
+													bind:value={editingGroupName}
+													onkeydown={(e) => {
+														if (e.key === 'Enter') {
+															if (editingGroupName.trim()) renameGroup(group.id, editingGroupName.trim());
+															editingGroupId = null;
+														} else if (e.key === 'Escape') {
+															editingGroupId = null;
+														}
+													}}
+													onblur={() => {
+														if (editingGroupName.trim()) renameGroup(group.id, editingGroupName.trim());
+														editingGroupId = null;
+													}}
+													use:focusOnMount
+												/>
+											{:else}
+												<span class="group-name-editable"
+													role="button" tabindex="0"
+													title="Click to rename"
+													onclick={(e) => { e.stopPropagation(); editingGroupId = group.id; editingGroupName = group.name; }}
+													onkeydown={(e) => { if (e.key === 'Enter') { editingGroupId = group.id; editingGroupName = group.name; } }}
+												>{group.name}</span>
+											{/if}
+											<span class="group-item-count">({group.entityCiks.length})</span>
+											<button type="button" class="group-item-add" onclick={() => addEntitiesToGroup(group.id)} title="Add entities to this group">+</button>
+										</div>
 									{/each}
 									<div class="group-divider"></div>
 								{/if}
@@ -1288,7 +1395,7 @@
 						</div>
 					</div>
 					<div class="names-list">
-						{#each $extractedNames as entry (`${entry.name.firstName}_${entry.name.lastName}`)}
+						{#each $extractedNames.filter(e => !HIDDEN_NAMES.has(e.name.fullName.toLowerCase())) as entry (`${entry.name.firstName}_${entry.name.lastName}`)}
 							{@const nameKey = `${entry.name.firstName}_${entry.name.lastName}`.toLowerCase()}
 							<div class="name-row" class:match-row-highlight={entry.oigStatus === 'match'}>
 								<div class="name-left">
@@ -1338,24 +1445,25 @@
 												{/if}
 											</span>
 										</span>
+										<span class="badge {statusBadgeClass(entry.oigStatus)}">
+											{statusLabel(entry.oigStatus, entry.oigMatches)}
+										</span>
+										{#if entry.oigStatus === 'clear' || entry.oigStatus === 'possible_match'}
+											<a href={buildOIGVerifyUrl(entry.name.lastName, entry.name.firstName)}
+												target="_blank" rel="noopener noreferrer"
+												class="verify-icon-link" title="Verify on OIG">
+												<i class="fa-thin fa-arrow-up-right-from-square"></i>
+											</a>
+										{/if}
 									</div>
 									<div class="name-source text-xs text-muted">{entry.source}</div>
 								</div>
 								<div class="name-right">
-									<span class="badge {statusBadgeClass(entry.oigStatus)}">
-										{statusLabel(entry.oigStatus, entry.oigMatches)}
-									</span>
-									{#if entry.oigStatus === 'clear' || entry.oigStatus === 'possible_match'}
-										<a href={buildOIGVerifyUrl(entry.name.lastName, entry.name.firstName)}
-											target="_blank" rel="noopener noreferrer"
-											class="verify-icon-link" title="Verify on OIG">
-											<i class="fa-thin fa-arrow-up-right-from-square"></i>
-										</a>
-									{/if}
-									<!-- Filing badges -->
+									<!-- Filing badges (deduplicated by form type) -->
 									{#if entry.filings && entry.filings.length > 0}
+										{@const uniqueFilings = entry.filings.filter((f, i, arr) => arr.findIndex(x => x.form === f.form) === i)}
 										<div class="filing-badges">
-											{#each entry.filings as filing (filing.accession)}
+											{#each uniqueFilings as filing (filing.form)}
 												<button
 													type="button"
 													class="filing-badge"
@@ -1590,6 +1698,36 @@
 			</div>
 		</div>
 	{/if}
+
+	<!-- Floating banana help trigger -->
+	<button class="banana-trigger" onclick={(e) => { e.stopPropagation(); bananaOpen = !bananaOpen; }} title="Help & Info">
+		<img src={bananaImg} alt="Help" width="48" height="48" />
+	</button>
+	{#if bananaOpen}
+		<div class="banana-popup">
+			<div class="banana-popup-header">
+				<span>CIK-OIG Check</span>
+				<button class="banana-popup-close" onclick={() => bananaOpen = false}>x</button>
+			</div>
+			<div class="banana-popup-body">
+				<p>Search SEC-registered entities by name or CIK, pull filings from EDGAR, extract affiliated persons, and cross-reference against the HHS OIG exclusion database (LEIE).</p>
+				<div class="banana-section">
+					<strong>Entity mode</strong> <i class="fa-thin fa-building"></i> -- Search entities, pin them as badges, then SEARCH to scan filings and check OIG.
+				</div>
+				<div class="banana-section">
+					<strong>Person mode</strong> <i class="fa-thin fa-user"></i> -- Check a person directly against OIG. Enter as "Last, First" or "First Last".
+				</div>
+				<div class="banana-section">
+					<strong>Tips</strong>
+					<ul>
+						<li>Use <i class="fa-thin fa-thumbtack"></i> to pin names across searches</li>
+						<li>Long-press a pin to assign colors/groups</li>
+						<li>Use <i class="fa-thin fa-gear"></i> for settings, saved groups, and history</li>
+					</ul>
+				</div>
+			</div>
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -1690,6 +1828,7 @@
 		font-size: 0.65rem !important;
 		padding: 0.2rem 0.5rem !important;
 		min-width: 5.5rem;
+		width: 7rem;
 		text-align: center;
 	}
 
@@ -1855,7 +1994,6 @@
 	.compact-info-trigger:hover { color: var(--color-text); }
 
 	.compact-info-popup {
-		display: none;
 		position: absolute;
 		top: 100%;
 		left: 0;
@@ -1868,11 +2006,17 @@
 		font-size: 0.78rem;
 		line-height: 1.6;
 		color: var(--color-text-muted);
+		opacity: 0;
+		visibility: hidden;
+		pointer-events: none;
+		transition: opacity 0.15s ease, visibility 0.15s ease;
 	}
 
 	.compact-info-wrapper:hover .compact-info-popup,
 	.compact-info-wrapper:focus-within .compact-info-popup {
-		display: block;
+		opacity: 1;
+		visibility: visible;
+		pointer-events: auto;
 	}
 
 	/* Panel header with status counts */
@@ -2044,13 +2188,16 @@
 		align-items: center;
 		gap: var(--spacing-sm);
 		flex-shrink: 0;
+		flex-wrap: wrap;
+		justify-content: flex-end;
 	}
 
-	/* Filing badges */
+	/* Filing badges -- max 10 per row, overflow wraps right-aligned */
 	.filing-badges {
-		display: flex;
+		display: inline-grid;
+		grid-template-columns: repeat(10, auto);
 		gap: 0.25rem;
-		flex-wrap: wrap;
+		justify-content: end;
 	}
 
 	.filing-badge {
@@ -2392,6 +2539,56 @@
 		background: var(--color-hover-bg) !important;
 		transform: none !important;
 		box-shadow: none !important;
+	}
+
+	.group-item-row {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.35rem var(--spacing-xs);
+		border-bottom: 1px solid var(--color-border);
+		font-size: 0.72rem;
+	}
+	.group-name-editable {
+		flex: 1;
+		cursor: text;
+		font-weight: 600;
+		border-bottom: 1px dashed transparent;
+	}
+	.group-name-editable:hover {
+		border-bottom-color: var(--color-text-muted);
+	}
+	.group-item-count {
+		color: var(--color-text-muted);
+		font-size: 0.65rem;
+	}
+	.group-item-add {
+		background: none !important;
+		border: none !important;
+		box-shadow: none !important;
+		padding: 0.1rem 0.3rem !important;
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+		cursor: pointer;
+		font-family: var(--font-mono);
+		text-transform: none !important;
+		letter-spacing: 0 !important;
+	}
+	.group-item-add:hover {
+		color: var(--color-text);
+		transform: none !important;
+		box-shadow: none !important;
+	}
+	.group-rename-input {
+		flex: 1;
+		font-family: var(--font-mono);
+		font-size: 0.72rem;
+		font-weight: 600;
+		padding: 0.1rem 0.25rem;
+		border: 1px solid var(--color-link);
+		background: var(--color-bg);
+		color: var(--color-text);
+		outline: none;
 	}
 
 	.group-divider {
@@ -2765,7 +2962,8 @@
 	.settings-fav-add { background: none !important; border: none !important; box-shadow: none !important; padding: 0.1rem 0.3rem !important; font-size: 0.7rem; color: var(--color-text-muted); cursor: pointer; font-family: var(--font-mono); text-transform: none !important; letter-spacing: 0 !important; }
 	.settings-fav-add:hover { color: var(--color-text); transform: none !important; box-shadow: none !important; }
 	.settings-group-row { display: flex; align-items: center; gap: 0.35rem; padding: 0.1rem 0; font-size: 0.72rem; }
-	.settings-group-name { flex: 1; font-weight: 600; }
+	.settings-group-tag { flex: 1; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.settings-group-count { color: var(--color-text-muted); font-family: var(--font-mono); font-size: 0.65rem; }
 	.settings-danger { color: var(--color-error) !important; border-color: var(--color-error) !important; }
 	.mt-sm { margin-top: var(--spacing-sm); }
 
@@ -2820,6 +3018,93 @@
 
 	.current-search-container .panel:last-child {
 		border-bottom: none;
+	}
+
+	/* Banana floating help trigger */
+	.banana-trigger {
+		position: fixed;
+		bottom: 20px;
+		right: 20px;
+		z-index: 9999;
+		background: none;
+		border: none;
+		box-shadow: none;
+		cursor: pointer;
+		padding: 0;
+		line-height: 0;
+		transition: transform 0.15s ease;
+	}
+	.banana-trigger:hover {
+		transform: scale(1.15);
+		box-shadow: none;
+	}
+	.banana-trigger:active {
+		box-shadow: none;
+	}
+	.banana-trigger img {
+		display: block;
+	}
+
+	.banana-popup {
+		position: fixed;
+		bottom: 80px;
+		right: 24px;
+		z-index: 9999;
+		width: 320px;
+		max-height: 400px;
+		overflow-y: auto;
+		background: var(--color-bg, #fff);
+		border: 1px solid var(--color-border, #ccc);
+		border-radius: 6px;
+		font-family: 'JetBrains Mono', 'Fira Code', monospace;
+		font-size: 0.75rem;
+	}
+	.banana-popup-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 8px 10px;
+		border-bottom: 1px solid var(--color-border, #ccc);
+		font-weight: 700;
+		font-size: 0.8rem;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+	}
+	.banana-popup-close {
+		background: none;
+		border: none;
+		box-shadow: none;
+		cursor: pointer;
+		font-size: 0.9rem;
+		color: var(--color-text-muted, #888);
+		padding: 0 4px;
+	}
+	.banana-popup-close:hover {
+		color: var(--color-text, #000);
+		box-shadow: none;
+		transform: none;
+	}
+	.banana-popup-close:active {
+		box-shadow: none;
+		transform: none;
+	}
+	.banana-popup-body {
+		padding: 10px;
+		line-height: 1.5;
+		color: var(--color-text, #333);
+	}
+	.banana-popup-body p {
+		margin: 0 0 8px;
+	}
+	.banana-section {
+		margin-bottom: 8px;
+	}
+	.banana-section ul {
+		margin: 4px 0 0 16px;
+		padding: 0;
+	}
+	.banana-section li {
+		margin-bottom: 2px;
 	}
 
 </style>

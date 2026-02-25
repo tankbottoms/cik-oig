@@ -46,7 +46,7 @@ export function saveFavorites(data: PersistedFavorites): void {
 
 export function savePinnedEntities(entities: SelectedEntity[]): void {
 	const fav = loadFavorites();
-	fav.entities = entities.filter(e => e.pinned);
+	fav.entities = entities.filter(e => e.pinned).slice(0, 15);
 	saveFavorites(fav);
 }
 
