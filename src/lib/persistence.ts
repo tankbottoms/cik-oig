@@ -19,9 +19,17 @@ export function loadFavorites(): PersistedFavorites {
 		if (typeof window === 'undefined') return getDefaults();
 		const stored = localStorage.getItem(STORAGE_KEY);
 		if (!stored) return getDefaults();
-		const parsed = JSON.parse(stored) as PersistedFavorites;
-		// Version migration can go here in future
-		return parsed;
+		const parsed = JSON.parse(stored);
+		const defaults = getDefaults();
+		// Ensure all required fields exist (handles data from older versions)
+		return {
+			version: parsed.version ?? defaults.version,
+			entities: Array.isArray(parsed.entities) ? parsed.entities : defaults.entities,
+			groups: Array.isArray(parsed.groups) ? parsed.groups : defaults.groups,
+			persons: Array.isArray(parsed.persons) ? parsed.persons : defaults.persons,
+			entityHistory: Array.isArray(parsed.entityHistory) ? parsed.entityHistory : defaults.entityHistory,
+			settings: parsed.settings ?? defaults.settings,
+		};
 	} catch {
 		return getDefaults();
 	}
