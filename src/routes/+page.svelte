@@ -1209,6 +1209,13 @@
 
 	{#if searchActive || $extractedNames.some(n => n.pinned)}
 		<div class="results container">
+			<!-- Current search container -->
+			<div class="current-search-container">
+				<div class="current-search-header">
+					<i class="fas fa-thumbtack"></i>
+					<span>CURRENT SEARCH</span>
+				</div>
+
 			<!-- Entity summary panel -->
 			{#if searchActive && selectedEntities.length > 0}
 				<div class="panel mt-lg">
@@ -1485,6 +1492,8 @@
 					</div>
 				</div>
 			{/if}
+			</div>
+			<!-- End current search container -->
 
 			<!-- Terminal log -->
 			{#if $logLines.length > 0}
@@ -2768,5 +2777,43 @@
 	.entity-summary-meta { margin-top: 0.15rem; }
 	.entity-summary-forms { display: flex; gap: 0.25rem; flex-wrap: wrap; margin-top: 0.3rem; }
 	.entity-summary-right { position: relative; display: flex; align-items: center; gap: var(--spacing-sm); flex-shrink: 0; }
+
+	/* Current search container */
+	.current-search-container {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg-panel);
+		overflow: hidden;
+	}
+
+	.current-search-header {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: var(--spacing-md);
+		border-bottom: 1px solid var(--color-border);
+		background: var(--color-bg-hover);
+		font-size: 0.7rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--color-text-muted);
+	}
+
+	.current-search-header i {
+		color: var(--color-text);
+		font-size: 0.75rem;
+	}
+
+	.current-search-container .panel {
+		border: none;
+		border-radius: 0;
+		margin-top: 0;
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.current-search-container .panel:last-child {
+		border-bottom: none;
+	}
 
 </style>
