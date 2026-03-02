@@ -1,12 +1,10 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { loadOIGData, searchIndividual, searchBusiness } from '$lib/data/oig-parser';
+import { searchIndividual, searchBusiness } from '$lib/data/oig-parser';
 import type { OIGSearchResult } from '$lib/types';
 
 export const POST: RequestHandler = async ({ request, url }) => {
-  // Build origin for CDN fetch fallback (works on Vercel where static files are on CDN)
   const origin = url.origin;
-  await loadOIGData(origin);
 
   const body = await request.json();
   const { names = [], businesses = [] } = body as {
@@ -18,7 +16,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
 
   // Check individuals
   for (const name of names) {
-    const matches = searchIndividual(name.firstName, name.lastName, name.middleName);
+    const matches = await searchIndividual(name.firstName, name.lastName, name.middleName, origin);
     const queriedName = `${name.firstName} ${name.middleName ? name.middleName + ' ' : ''}${name.lastName}`;
 
     let status: OIGSearchResult['status'] = 'CLEAR';
@@ -33,7 +31,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
 
   // Check businesses
   for (const busName of businesses) {
-    const matches = searchBusiness(busName);
+    const matches = await searchBusiness(busName, origin);
 
     let status: OIGSearchResult['status'] = 'CLEAR';
     if (matches.some(m => m.matchType === 'business')) {

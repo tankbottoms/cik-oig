@@ -1,170 +1,84 @@
-import { readFileSync, existsSync } from 'fs';
-import { dirname, join, resolve } from 'path';
-import { fileURLToPath } from 'url';
 import type { OIGExclusion, OIGMatch } from '$lib/types';
 
-let individuals: Map<string, OIGExclusion[]> | null = null;
-let businesses: Map<string, OIGExclusion[]> | null = null;
-let loaded = false;
-let loadingPromise: Promise<void> | null = null;
+interface LetterData {
+  individuals: Record<string, OIGExclusion[]>;
+  businesses: Record<string, OIGExclusion[]>;
+}
+
+/** Per-letter cache: letter -> parsed JSON data */
+const cache = new Map<string, LetterData>();
+
+/** In-flight fetches to avoid duplicate requests */
+const pending = new Map<string, Promise<LetterData>>();
 
 function normalizeKey(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-function parseCSVLine(line: string): string[] {
-  const fields: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      inQuotes = !inQuotes;
-    } else if (ch === ',' && !inQuotes) {
-      fields.push(current.trim());
-      current = '';
-    } else {
-      current += ch;
-    }
-  }
-  fields.push(current.trim());
-  return fields;
+function letterOf(s: string): string {
+  const norm = s.replace(/[^a-zA-Z]/g, '');
+  if (!norm) return '_';
+  const first = norm.charAt(0).toLowerCase();
+  return first >= 'a' && first <= 'z' ? first : '_';
 }
 
-function indexCSV(raw: string): void {
-  individuals = new Map();
-  businesses = new Map();
+async function loadLetter(letter: string, origin: string): Promise<LetterData> {
+  const cached = cache.get(letter);
+  if (cached) return cached;
 
-  const lines = raw.split('\n');
-  // Skip header row
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
+  const inflight = pending.get(letter);
+  if (inflight) return inflight;
 
-    const fields = parseCSVLine(line);
-    if (fields.length < 18) continue;
-
-    // CSV columns: LASTNAME,FIRSTNAME,MIDNAME,BUSNAME,GENERAL,SPECIALTY,
-    //   UPIN,NPI,DOB,ADDRESS,CITY,STATE,ZIP,EXCLTYPE,EXCLDATE,REINDATE,WAIVERDATE,WVRSTATE
-    const exclusion: OIGExclusion = {
-      lastName: fields[0] || '',
-      firstName: fields[1] || '',
-      midName: fields[2] || '',
-      busName: fields[3] || '',
-      general: fields[4] || '',
-      specialty: fields[5] || '',
-      upin: fields[6] || '',
-      npi: fields[7] || '',
-      dob: fields[8] || '',
-      address: fields[9] || '',
-      city: fields[10] || '',
-      state: fields[11] || '',
-      zip: fields[12] || '',
-      exclType: fields[13] || '',
-      exclDate: fields[14] || '',
-      reinDate: fields[15] || '',
-      waiverDate: fields[16] || '',
-      waiverState: fields[17] || '',
-    };
-
-    // Index individuals
-    if (exclusion.lastName) {
-      const key = normalizeKey(exclusion.lastName + exclusion.firstName);
-      const existing = individuals.get(key) || [];
-      existing.push(exclusion);
-      individuals.set(key, existing);
-    }
-
-    // Index businesses
-    if (exclusion.busName) {
-      const key = normalizeKey(exclusion.busName);
-      const existing = businesses.get(key) || [];
-      existing.push(exclusion);
-      businesses.set(key, existing);
-    }
-  }
-
-  loaded = true;
-  console.log(
-    `OIG data loaded: ${individuals.size} individual keys, ${businesses.size} business keys`
-  );
-}
-
-export async function loadOIGData(origin?: string): Promise<void> {
-  if (loaded) return;
-  if (loadingPromise) return loadingPromise;
-
-  loadingPromise = (async () => {
-    individuals = new Map();
-    businesses = new Map();
-
-    const thisDir = dirname(fileURLToPath(import.meta.url));
-
-    // Try filesystem paths (local dev + Vercel includeFiles bundle)
-    const possiblePaths = [
-      join(process.cwd(), 'static', 'csvs', 'UPDATED.csv'),
-      resolve(thisDir, '../../../..', 'static', 'csvs', 'UPDATED.csv'),
-      resolve(thisDir, '..', 'static', 'csvs', 'UPDATED.csv'),
-      resolve(thisDir, '..', 'csvs', 'UPDATED.csv'),
-      join(process.cwd(), 'csvs', 'UPDATED.csv'),
-    ];
-
-    let raw: string | null = null;
-
-    for (const p of possiblePaths) {
-      if (existsSync(p)) {
-        try {
-          raw = readFileSync(p, 'utf-8');
-          console.log('OIG CSV loaded from filesystem:', p);
-          break;
-        } catch {
-          console.warn('OIG CSV read error at', p);
-        }
+  const promise = (async (): Promise<LetterData> => {
+    const empty: LetterData = { individuals: {}, businesses: {} };
+    try {
+      const url = `${origin}/data/oig/${letter}.json`;
+      const resp = await globalThis.fetch(url);
+      if (!resp.ok) {
+        console.warn(`OIG letter ${letter}: fetch returned ${resp.status}`);
+        cache.set(letter, empty);
+        return empty;
       }
+      const data: LetterData = await resp.json();
+      cache.set(letter, data);
+      return data;
+    } catch (err) {
+      console.warn(`OIG letter ${letter}: fetch failed:`, err);
+      cache.set(letter, empty);
+      return empty;
+    } finally {
+      pending.delete(letter);
     }
-
-    // Fallback: fetch from CDN (Vercel serves static/ files via CDN)
-    if (!raw && origin) {
-      try {
-        const csvUrl = `${origin}/csvs/UPDATED.csv`;
-        console.log('OIG CSV: fetching from CDN at', csvUrl);
-        const resp = await globalThis.fetch(csvUrl);
-        if (resp.ok) {
-          raw = await resp.text();
-          console.log(`OIG CSV loaded via CDN fetch (${raw.length} bytes)`);
-        } else {
-          console.warn('OIG CSV CDN fetch returned', resp.status);
-        }
-      } catch (err) {
-        console.warn('OIG CSV CDN fetch failed:', err);
-      }
-    }
-
-    if (!raw) {
-      console.warn('OIG CSV not found at any path. Tried:', possiblePaths.join(', '));
-      loaded = true;
-      return;
-    }
-
-    indexCSV(raw);
   })();
 
-  return loadingPromise;
+  pending.set(letter, promise);
+  return promise;
 }
 
-export function searchIndividual(
+/**
+ * No-op for backward compatibility. Data loads lazily per letter.
+ */
+export async function loadOIGData(_origin?: string): Promise<void> {
+  // Data is now loaded on demand per letter in search functions.
+}
+
+export async function searchIndividual(
   firstName: string,
   lastName: string,
-  middleName?: string
-): OIGMatch[] {
-  if (!individuals) return [];
+  _middleName?: string,
+  origin?: string
+): Promise<OIGMatch[]> {
+  if (!origin || !lastName) return [];
+
+  const letter = letterOf(lastName);
+  const data = await loadLetter(letter, origin);
+  const individuals = data.individuals;
 
   const matches: OIGMatch[] = [];
 
   // Exact match: lastName + firstName
   const exactKey = normalizeKey(lastName + firstName);
-  const exact = individuals.get(exactKey);
+  const exact = individuals[exactKey];
   if (exact) {
     for (const e of exact) {
       matches.push({ ...e, matchType: 'exact' });
@@ -174,7 +88,7 @@ export function searchIndividual(
   // Partial match: lastName only, then check firstName prefix
   if (matches.length === 0) {
     const lastNameNorm = normalizeKey(lastName);
-    for (const [key, exclusions] of individuals) {
+    for (const [key, exclusions] of Object.entries(individuals)) {
       if (key.startsWith(lastNameNorm) && key !== exactKey) {
         for (const e of exclusions) {
           const fnNorm = normalizeKey(firstName);
@@ -190,18 +104,25 @@ export function searchIndividual(
   return matches;
 }
 
-export function searchBusiness(busName: string): OIGMatch[] {
-  if (!businesses) return [];
+export async function searchBusiness(
+  busName: string,
+  origin?: string
+): Promise<OIGMatch[]> {
+  if (!origin || !busName) return [];
+
+  const letter = letterOf(busName);
+  const data = await loadLetter(letter, origin);
+  const businesses = data.businesses;
 
   const key = normalizeKey(busName);
-  const exact = businesses.get(key);
+  const exact = businesses[key];
   if (exact) {
     return exact.map(e => ({ ...e, matchType: 'business' as const }));
   }
 
-  // Partial business match
+  // Partial business match within same letter bucket
   const matches: OIGMatch[] = [];
-  for (const [k, exclusions] of businesses) {
+  for (const [k, exclusions] of Object.entries(businesses)) {
     if (k.includes(key) || key.includes(k)) {
       for (const e of exclusions) {
         matches.push({ ...e, matchType: 'business' });
