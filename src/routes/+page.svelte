@@ -125,8 +125,13 @@
 		}
 	});
 
-	// Load persisted favorites on init
-	let persistedFavorites = $state(loadFavorites());
+	// Load persisted favorites on init -- capture initial snapshot as plain const
+	// to avoid Svelte state_referenced_locally warnings in $state() initializers
+	const initialFavorites = loadFavorites();
+	let persistedFavorites = $state(initialFavorites);
+
+	// Dev mode: ?dev in URL enables pre-loaded test entities and groups
+	const devMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('dev');
 
 	$effect(() => {
 		if (settingsOpen) {
@@ -139,29 +144,29 @@
 		}
 	});
 
-	// Default "Cane Entities" group
-	const DEFAULT_ENTITIES: SelectedEntity[] = [
+	// Default "Cane Entities" group (dev mode only)
+	const DEFAULT_ENTITIES: SelectedEntity[] = devMode ? [
 		{ name: 'MW MEDICAL INC', cik: '0001059577', color: '#BAFFC9' },
 		{ name: 'DYNAMIC ASSOCIATES INC', cik: '0000878146', color: '#BAFFC9' },
 		{ name: 'LEGAL ACCESS TECHNOLOGIES INC', cik: '0000878146', color: '#BAFFC9' },
 		{ name: 'DAVI SKIN INC', cik: '0001285991', color: '#BAFFC9' },
 		{ name: 'DAVI SKIN, INC.', cik: '0001059577', color: '#BAFFC9' },
-	];
-	const DEFAULT_GROUP = {
+	] : [];
+	const DEFAULT_GROUP = devMode ? {
 		id: 'cane-entities-default',
 		name: 'Cane Entities',
 		color: '#BAFFC9',
 		entityCiks: DEFAULT_ENTITIES.map(e => e.cik),
 		createdAt: Date.now(),
-	};
+	} : null;
 
-	// Hidden names -- filtered from extracted names display
-	const HIDDEN_NAMES = new Set(['mark phillips']);
+	// Hidden names -- filtered from extracted names display (dev mode only)
+	const HIDDEN_NAMES = devMode ? new Set(['mark phillips']) : new Set<string>();
 
 	let query = $state('');
 	let selectedEntities: SelectedEntity[] = $state(
-		(persistedFavorites?.entities?.length ?? 0) > 0
-			? persistedFavorites.entities
+		(initialFavorites.entities?.length ?? 0) > 0
+			? initialFavorites.entities
 			: DEFAULT_ENTITIES
 	);
 	let dropdownResults: SelectedEntity[] = $state([]);
@@ -171,21 +176,21 @@
 	let inputEl: HTMLInputElement | undefined = $state();
 	let loadingDropdown = $state(false);
 	let logExpanded = $state(false);
-	let darkMode = $state(persistedFavorites?.settings?.darkMode ?? false);
-	let searchMode: SearchMode = $state(persistedFavorites?.settings?.defaultSearchMode ?? 'entity');
+	let darkMode = $state(initialFavorites.settings?.darkMode ?? false);
+	let searchMode: SearchMode = $state(initialFavorites.settings?.defaultSearchMode ?? 'entity');
 	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 
 	// Person mode state
 	let selectedPersons: Array<{ firstName: string; lastName: string; middleName?: string; fullName: string }> = $state(
-		(persistedFavorites?.persons?.length ?? 0) > 0
-			? persistedFavorites.persons
+		(initialFavorites.persons?.length ?? 0) > 0
+			? initialFavorites.persons
 			: [{ firstName: 'Daniel', lastName: 'Jung', middleName: 'F.', fullName: 'Daniel F. Jung' }]
 	);
 
 	// Entity pin + color grouping
 	const PASTEL_COLORS = ['#FFB3BA', '#FFDFBA', '#FFFFBA', '#BAFFC9', '#BAE1FF', '#E8BAFF', '#FFB3E6', '#D4A5FF'];
 	let entityGroups: Array<{ id: string; name: string; color: string; entityCiks: string[]; createdAt: number }> = $state(
-		(persistedFavorites?.groups?.length ?? 0) > 0 ? persistedFavorites!.groups : [DEFAULT_GROUP]
+		(initialFavorites.groups?.length ?? 0) > 0 ? initialFavorites.groups : DEFAULT_GROUP ? [DEFAULT_GROUP] : []
 	);
 	let colorPickerTarget: string | null = $state(null);
 	let longPressTimer: ReturnType<typeof setTimeout> | undefined;
@@ -268,38 +273,40 @@
 		}
 	}
 
-	// Pre-pin Robert B. Spertell on mount and check against OIG
 	onMount(async () => {
 		document.addEventListener('click', handleDocumentClick);
 		// Apply dark mode theme if persisted
 		if (darkMode) {
 			document.documentElement.setAttribute('data-theme', 'dark');
 		}
-		const alreadyExists = $extractedNames.some(n => n.name.lastName.toLowerCase() === 'spertell');
-		if (!alreadyExists) {
-			extractedNames.update(names => [...names, {
-				name: { firstName: 'Robert', lastName: 'Spertell', middleName: 'B.', fullName: 'Robert B. Spertell', source: 'Pre-loaded' },
-				oigStatus: 'pending' as const,
-				source: 'Pre-loaded',
-				filings: [],
-				pinned: true,
-			}]);
-		}
-		// Check pre-loaded names against OIG
-		const pending = $extractedNames.filter(n => n.oigStatus === 'pending');
-		if (pending.length > 0) {
-			try {
-				const resp = await fetch('/api/oig/search', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({
-						names: pending.map(n => ({ firstName: n.name.firstName, lastName: n.name.lastName, middleName: n.name.middleName })),
-					}),
-				});
-				const result = await resp.json();
-				updateOIGResults(result.results);
-			} catch {
-				// Silently fail for pre-loaded check
+		// Pre-pin test entities only in dev mode (?dev in URL)
+		if (devMode) {
+			const alreadyExists = $extractedNames.some(n => n.name.lastName.toLowerCase() === 'spertell');
+			if (!alreadyExists) {
+				extractedNames.update(names => [...names, {
+					name: { firstName: 'Robert', lastName: 'Spertell', middleName: 'B.', fullName: 'Robert B. Spertell', source: 'Pre-loaded' },
+					oigStatus: 'pending' as const,
+					source: 'Pre-loaded',
+					filings: [],
+					pinned: true,
+				}]);
+			}
+			// Check pre-loaded names against OIG
+			const pending = $extractedNames.filter(n => n.oigStatus === 'pending');
+			if (pending.length > 0) {
+				try {
+					const resp = await fetch('/api/oig/search', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							names: pending.map(n => ({ firstName: n.name.firstName, lastName: n.name.lastName, middleName: n.name.middleName })),
+						}),
+					});
+					const result = await resp.json();
+					updateOIGResults(result.results);
+				} catch {
+					// Silently fail for pre-loaded check
+				}
 			}
 		}
 	});
@@ -1305,6 +1312,7 @@
 						class="dropdown-item"
 						class:highlighted={i === highlightedIndex}
 						onclick={() => selectEntity(result)}
+						onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectEntity(result); } }}
 						onmouseenter={() => { highlightedIndex = i; }}
 						role="option"
 						tabindex="-1"
@@ -1673,7 +1681,7 @@
 								<tr><td>5</td><td>SGML headers</td><td>FILED BY: John Smith</td></tr>
 								<tr><td>6</td><td>Director/nominee lists</td><td>Jane Doe 58 2019</td></tr>
 								<tr><td>7</td><td>Narrative context</td><td>Jane Doe has served as...</td></tr>
-								<tr><td>8</td><td>Departures</td><td>Robert Spertell, resigned as...</td></tr>
+								<tr><td>8</td><td>Departures</td><td>John Smith, resigned as...</td></tr>
 								<tr><td>9</td><td>Role descriptions</td><td>Jane Doe, a director...</td></tr>
 								<tr><td>10</td><td>Appointments</td><td>John Smith was appointed as...</td></tr>
 							</tbody>
