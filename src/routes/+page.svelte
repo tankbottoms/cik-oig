@@ -144,31 +144,11 @@
 		}
 	});
 
-	// Default "Cane Entities" group (dev mode only)
-	const DEFAULT_ENTITIES: SelectedEntity[] = devMode ? [
-		{ name: 'MW MEDICAL INC', cik: '0001059577', color: '#BAFFC9' },
-		{ name: 'DYNAMIC ASSOCIATES INC', cik: '0000878146', color: '#BAFFC9' },
-		{ name: 'LEGAL ACCESS TECHNOLOGIES INC', cik: '0000878146', color: '#BAFFC9' },
-		{ name: 'DAVI SKIN INC', cik: '0001285991', color: '#BAFFC9' },
-		{ name: 'DAVI SKIN, INC.', cik: '0001059577', color: '#BAFFC9' },
-	] : [];
-	const DEFAULT_GROUP = devMode ? {
-		id: 'cane-entities-default',
-		name: 'Cane Entities',
-		color: '#BAFFC9',
-		entityCiks: DEFAULT_ENTITIES.map(e => e.cik),
-		createdAt: Date.now(),
-	} : null;
-
 	// Hidden names -- filtered from extracted names display (dev mode only)
 	const HIDDEN_NAMES = devMode ? new Set(['mark phillips']) : new Set<string>();
 
 	let query = $state('');
-	let selectedEntities: SelectedEntity[] = $state(
-		(initialFavorites.entities?.length ?? 0) > 0
-			? initialFavorites.entities
-			: DEFAULT_ENTITIES
-	);
+	let selectedEntities: SelectedEntity[] = $state(initialFavorites.entities ?? []);
 	let dropdownResults: SelectedEntity[] = $state([]);
 	let dropdownVisible = $state(false);
 	let highlightedIndex = $state(0);
@@ -189,9 +169,7 @@
 
 	// Entity pin + color grouping
 	const PASTEL_COLORS = ['#FFB3BA', '#FFDFBA', '#FFFFBA', '#BAFFC9', '#BAE1FF', '#E8BAFF', '#FFB3E6', '#D4A5FF'];
-	let entityGroups: Array<{ id: string; name: string; color: string; entityCiks: string[]; createdAt: number }> = $state(
-		(initialFavorites.groups?.length ?? 0) > 0 ? initialFavorites.groups : DEFAULT_GROUP ? [DEFAULT_GROUP] : []
-	);
+	let entityGroups: Array<{ id: string; name: string; color: string; entityCiks: string[]; createdAt: number }> = $state(initialFavorites.groups ?? []);
 	let colorPickerTarget: string | null = $state(null);
 	let longPressTimer: ReturnType<typeof setTimeout> | undefined;
 	let longPressTriggered = false;
@@ -279,8 +257,26 @@
 		if (darkMode) {
 			document.documentElement.setAttribute('data-theme', 'dark');
 		}
-		// Pre-pin test entities only in dev mode (?dev in URL)
+		// Dev mode (?dev in URL): inject test entities, groups, and pre-pinned names
 		if (devMode) {
+			// Cane Entities group
+			if (selectedEntities.length === 0) {
+				selectedEntities = [
+					{ name: 'MW MEDICAL INC', cik: '0001059577', color: '#BAFFC9' },
+					{ name: 'DYNAMIC ASSOCIATES INC', cik: '0000878146', color: '#BAFFC9' },
+					{ name: 'LEGAL ACCESS TECHNOLOGIES INC', cik: '0000878146', color: '#BAFFC9' },
+					{ name: 'DAVI SKIN INC', cik: '0001285991', color: '#BAFFC9' },
+					{ name: 'DAVI SKIN, INC.', cik: '0001059577', color: '#BAFFC9' },
+				];
+				entityGroups = [{
+					id: 'cane-entities-default',
+					name: 'Cane Entities',
+					color: '#BAFFC9',
+					entityCiks: selectedEntities.map(e => e.cik),
+					createdAt: Date.now(),
+				}];
+			}
+			// Pre-pin Robert B. Spertell
 			const alreadyExists = $extractedNames.some(n => n.name.lastName.toLowerCase() === 'spertell');
 			if (!alreadyExists) {
 				extractedNames.update(names => [...names, {
